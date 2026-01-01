@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LockIn - AI Planning Architect",
-  description: "12-month sustainable goal achievement planning powered by AI",
+  title: "LockIn",
+  description: "A sustainable goal achievement planning powered by AI",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
