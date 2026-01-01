@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: 10 10 12;
+  --color-foreground: 250 250 250;
+  --color-card: 18 18 20;
+  --color-primary: 20 184 166;
+  --color-secondary: 30 30 35;
+  --color-muted: 40 40 45;
+  --color-muted-foreground: 163 163 163;
+  --color-accent: 20 184 166;
+  --color-border: 45 45 50;
+  --color-ring: 20 184 166;
+  --font-sans: var(--font-dm-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius: 0.75rem;
+}
+
+* {
+  border-color: rgb(45 45 50);
+}
+
+body {
+  background: rgb(10 10 12);
+  color: rgb(250 250 250);
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(10 10 12);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(40 40 45);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(60 60 65);
+}
+
+/* Glass morphism utilities */
+.glass {
+  background: rgba(18, 18, 20, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-hover:hover {
+  background: rgba(18, 18, 20, 0.9);
+  border-color: rgba(20, 184, 166, 0.3);
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, rgb(20, 184, 166) 0%, rgb(6, 182, 212) 100%);
+}
+
+.gradient-glow {
+  box-shadow: 0 0 60px rgba(20, 184, 166, 0.15);
+}
+
+/* Teal glow effect */
+.teal-glow {
+  box-shadow: 0 0 30px rgba(20, 184, 166, 0.2), 0 0 60px rgba(20, 184, 166, 0.1);
+}
+
+/* Subtle pattern background */
+.pattern-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.pattern-grid {
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-teal {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(20, 184, 166, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+.animate-pulse-teal {
+  animation: pulse-teal 2s infinite;
+}
+
+/* YAML-style display */
+.yaml-key {
+  color: rgb(20, 184, 166);
+}
+
+.yaml-string {
+  color: rgb(254, 240, 138);
+}
+
+.yaml-number {
+  color: rgb(147, 197, 253);
+}
+
+.yaml-boolean {
+  color: rgb(251, 146, 60);
+}
+
+/* Progress bars */
+.progress-bar {
+  background: linear-gradient(90deg, rgb(20, 184, 166) 0%, rgb(6, 182, 212) 100%);
+  transition: width 0.5s ease-out;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 40px rgba(20, 184, 166, 0.1);
+}
+
+/* Text gradient */
+.text-gradient {
+  background: linear-gradient(135deg, rgb(20, 184, 166) 0%, rgb(6, 182, 212) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
