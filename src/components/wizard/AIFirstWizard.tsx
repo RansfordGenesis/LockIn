@@ -7,14 +7,16 @@ import {
   ArrowRight,
   ArrowLeft,
   Check,
-  Clock,
   Loader2,
   Target,
   Code,
   User,
   Mail,
   Phone,
+  Calendar,
+  Home,
 } from "lucide-react";
+import { PLAN_CATEGORIES, TIMELINE_PRESETS, type PlanCategory } from "@/types/multiplan";
 
 // Pre-filled user info from auth screen
 interface AuthUserInfo {
@@ -75,6 +77,10 @@ interface WizardData {
   leetCodeLanguage: string;
   customCurriculum: string;
   useCustomCurriculum: boolean;
+  // New fields for category and timeline
+  selectedCategory: PlanCategory | null;
+  startDate: string;
+  timelineDays: number;
 }
 
 const leetCodeLanguages = [
@@ -100,15 +106,9 @@ const timeOptions = [
   { value: "3hr-daily", label: "3+ hours/day", description: "Intensive focus", minutes: 180 },
 ];
 
-const experienceLevels = [
-  { value: "beginner", label: "Beginner", description: "Just starting out" },
-  { value: "intermediate", label: "Intermediate", description: "Some experience" },
-  { value: "advanced", label: "Advanced", description: "Looking to master" },
-];
-
-export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onComplete: (data: WizardData) => void; authUser?: AuthUserInfo }>) {
+export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readonly<{ onComplete: (data: WizardData) => void; onCancel?: () => void; authUser?: AuthUserInfo }>) {
   // Skip contact step if authUser is provided
-  const [step, setStep] = useState<"goal" | "analyzing" | "questions" | "schedule" | "time" | "experience" | "leetcode" | "contact" | "review">("goal");
+  const [step, setStep] = useState<"category" | "goal" | "analyzing" | "questions" | "timeline" | "schedule" | "leetcode" | "contact" | "review">("category");
   const [data, setData] = useState<WizardData>(() => ({
     goal: "",
     analysis: null,
@@ -126,6 +126,10 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
     leetCodeLanguage: "python",
     customCurriculum: "",
     useCustomCurriculum: false,
+    // New defaults
+    selectedCategory: null,
+    startDate: new Date().toISOString().split('T')[0],
+    timelineDays: 365,
   }));
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -185,14 +189,6 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
 
   const handleScheduleTypeSelect = (scheduleType: "weekdays" | "fullweek") => {
     setData((prev) => ({ ...prev, scheduleType }));
-  };
-
-  const handleTimeCommitmentSelect = (timeCommitment: string) => {
-    setData((prev) => ({ ...prev, timeCommitment }));
-  };
-
-  const handleExperienceSelect = (experience: WizardData["experience"]) => {
-    setData((prev) => ({ ...prev, experience }));
   };
 
   const handleLeetCodeLanguageSelect = (language: string) => {
@@ -315,7 +311,7 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
     if (currentQuestionIndex < effectiveQuestions.length - 1) {
       setCurrentQuestionIndex((i) => i + 1);
     } else {
-      setStep("schedule");
+      setStep("timeline");
     }
   };
 
@@ -335,22 +331,139 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
     onComplete(data);
   };
 
-  const renderGoalStep = () => (
+  // Get selected category config
+  const selectedCategoryConfig = data.selectedCategory 
+    ? PLAN_CATEGORIES.find(c => c.id === data.selectedCategory) 
+    : null;
+
+  const renderCategoryStep = () => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-8"
+      className="space-y-6"
     >
+      {/* Back to Dashboard button */}
+      {onCancel && (
+        <div className="flex justify-start">
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+          >
+            <Home className="w-4 h-4" />
+            <span className="text-sm">Back to Dashboard</span>
+          </button>
+        </div>
+      )}
+
       <div className="text-center">
         <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
           <Target className="w-10 h-10 text-teal-400" />
         </div>
         <h2 className="text-3xl font-bold text-white mb-3">
-          What do you want to learn?
+          What do you want to master?
         </h2>
         <p className="text-gray-400 max-w-md mx-auto">
-          Describe your learning goal or paste your own curriculum to track.
+          Choose a category that best fits your learning goal
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {PLAN_CATEGORIES.map((category) => (
+          <button
+            key={category.id}
+            onClick={() => setData((prev) => ({ 
+              ...prev, 
+              selectedCategory: category.id,
+              // Auto-enable LeetCode for software category
+              includeLeetCode: category.showLeetCode ? prev.includeLeetCode : false
+            }))}
+            className={`p-4 rounded-xl border text-left transition-all ${
+              data.selectedCategory === category.id
+                ? "bg-teal-500/20 border-teal-500/50"
+                : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">{category.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-white truncate">{category.name}</p>
+                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{category.description}</p>
+              </div>
+              {data.selectedCategory === category.id && (
+                <div className="w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3 h-3 text-white" />
+                </div>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Sample goals for selected category */}
+      {selectedCategoryConfig && selectedCategoryConfig.sampleGoals.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="p-4 bg-white/5 rounded-xl border border-white/10"
+        >
+          <p className="text-xs text-gray-500 mb-2">Popular goals in {selectedCategoryConfig.name}:</p>
+          <div className="flex flex-wrap gap-2">
+            {selectedCategoryConfig.sampleGoals.map((goal) => (
+              <span
+                key={goal}
+                className="px-2 py-1 text-xs bg-teal-500/10 text-teal-400 rounded-lg"
+              >
+                {goal}
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      <div className="flex gap-3 pt-4">
+        <button
+          onClick={() => setStep("goal")}
+          disabled={!data.selectedCategory}
+          className="flex-1 py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group"
+        >
+          Continue
+          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+        </button>
+      </div>
+    </motion.div>
+  );
+
+  const renderGoalStep = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-6"
+    >
+      {/* Category indicator */}
+      {selectedCategoryConfig && (
+        <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10">
+          <span className="text-2xl">{selectedCategoryConfig.icon}</span>
+          <div className="flex-1">
+            <p className="text-sm text-gray-400">Category</p>
+            <p className="font-medium text-white">{selectedCategoryConfig.name}</p>
+          </div>
+          <button
+            onClick={() => setStep("category")}
+            className="text-xs text-teal-400 hover:text-teal-300"
+          >
+            Change
+          </button>
+        </div>
+      )}
+
+      <div className="text-center">
+        <h2 className="text-2xl font-bold text-white mb-2">
+          Describe your goal
+        </h2>
+        <p className="text-gray-400 text-sm">
+          Be specific about what you want to achieve
         </p>
       </div>
 
@@ -400,7 +513,7 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
 - Django (models, views, templates)
 - FastAPI (path operations, Pydantic)
 ...`}
-              className="w-full h-64 p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20 resize-none transition-all font-mono text-sm"
+              className="w-full h-48 p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20 resize-none transition-all font-mono text-sm"
             />
             <div className="absolute bottom-3 right-3 text-xs text-gray-500">
               {data.customCurriculum.length} characters
@@ -415,6 +528,13 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
 
           <div className="flex gap-3">
             <button
+              onClick={() => setStep("category")}
+              className="px-6 py-4 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <button
               onClick={() => {
                 if (data.customCurriculum.length < 50) {
                   setError("Please paste a more detailed curriculum");
@@ -426,7 +546,7 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
                   ...prev,
                   goal: `Custom curriculum: ${prev.customCurriculum.substring(0, 200)}...`,
                 }));
-                setStep("schedule");
+                setStep("timeline");
               }}
               disabled={data.customCurriculum.length < 50}
               className="flex-1 py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group"
@@ -443,8 +563,11 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
             <textarea
               value={data.goal}
               onChange={(e) => setData((prev) => ({ ...prev, goal: e.target.value }))}
-              placeholder="Example: I want to become a full-stack developer. I know some HTML and CSS, but I want to learn React, Node.js, and how to build complete web applications with databases..."
-              className="w-full h-40 p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20 resize-none transition-all"
+              placeholder={selectedCategoryConfig 
+                ? `Example: I want to ${selectedCategoryConfig.sampleGoals[0]?.toLowerCase() || "learn something new"}...`
+                : "Example: I want to become a full-stack developer..."
+              }
+              className="w-full h-32 p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20 resize-none transition-all"
             />
             <div className="absolute bottom-3 right-3 text-xs text-gray-500">
               {data.goal.length} characters
@@ -452,6 +575,13 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
           </div>
 
           <div className="flex gap-3">
+            <button
+              onClick={() => setStep("category")}
+              className="px-6 py-4 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
             <button
               onClick={analyzeGoal}
               disabled={data.goal.length < 10}
@@ -463,25 +593,23 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
             </button>
           </div>
 
-          <div className="pt-6 border-t border-white/10">
-            <p className="text-sm text-gray-500 text-center mb-3">Need inspiration? Try one of these:</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {[
-                "I want to learn backend development with Python",
-                "I want to become a machine learning engineer",
-                "I want to learn DevOps and cloud infrastructure",
-                "I want to master data structures & algorithms",
-              ].map((example) => (
-                <button
-                  key={example}
-                  onClick={() => handleGoalExampleClick(example)}
-                  className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-gray-400 hover:text-white hover:border-teal-500/30 transition-colors"
-                >
-                  {example}
-                </button>
-              ))}
+          {/* Sample goals for selected category */}
+          {selectedCategoryConfig && selectedCategoryConfig.sampleGoals.length > 0 && (
+            <div className="pt-4 border-t border-white/10">
+              <p className="text-sm text-gray-500 text-center mb-3">Quick start examples:</p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {selectedCategoryConfig.sampleGoals.map((example) => (
+                  <button
+                    key={example}
+                    onClick={() => handleGoalExampleClick(`I want to ${example.toLowerCase()}`)}
+                    className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-gray-400 hover:text-white hover:border-teal-500/30 transition-colors"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
@@ -660,6 +788,112 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
     );
   };
 
+  const renderTimelineStep = () => {
+    const selectedPreset = TIMELINE_PRESETS.find(p => p.days === data.timelineDays);
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+            <Calendar className="w-8 h-8 text-purple-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white">Plan Timeline</h2>
+          <p className="text-gray-400 mt-2">
+            How long do you want your learning journey to be?
+          </p>
+        </div>
+
+        {/* Timeline presets */}
+        <div className="grid grid-cols-3 gap-3">
+          {TIMELINE_PRESETS.map((preset) => (
+            <button
+              key={preset.days}
+              onClick={() => setData((prev) => ({ ...prev, timelineDays: preset.days }))}
+              className={`p-4 rounded-xl border text-center transition-all ${
+                data.timelineDays === preset.days
+                  ? "bg-purple-500/20 border-purple-500/50"
+                  : "bg-white/5 border-white/10 hover:border-white/20"
+              }`}
+            >
+              <p className="font-bold text-white">{preset.label}</p>
+              <p className="text-xs text-gray-400 mt-1">{preset.description}</p>
+            </button>
+          ))}
+        </div>
+
+        {/* Start Date */}
+        <div className="space-y-2">
+          <label htmlFor="start-date-input" className="block text-sm text-gray-400">Start Date</label>
+          <div className="flex gap-3">
+            <input
+              id="start-date-input"
+              type="date"
+              value={data.startDate}
+              onChange={(e) => setData((prev) => ({ ...prev, startDate: e.target.value }))}
+              min={new Date().toISOString().split('T')[0]}
+              className="flex-1 p-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20"
+            />
+            <button
+              onClick={() => setData((prev) => ({ ...prev, startDate: new Date().toISOString().split('T')[0] }))}
+              className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white hover:border-white/20"
+            >
+              Today
+            </button>
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Duration:</span>
+            <span className="text-purple-400 font-medium">{selectedPreset?.label || `${data.timelineDays} days`}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm mt-2">
+            <span className="text-gray-400">Start:</span>
+            <span className="text-purple-400 font-medium">
+              {new Date(data.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm mt-2">
+            <span className="text-gray-400">End:</span>
+            <span className="text-purple-400 font-medium">
+              {new Date(new Date(data.startDate).getTime() + data.timelineDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-4">
+          <button
+            onClick={() => {
+              if (data.useCustomCurriculum) {
+                setStep("goal");
+              } else {
+                setStep("questions");
+                const effectiveQs = getEffectiveQuestions();
+                setCurrentQuestionIndex(effectiveQs.length - 1);
+              }
+            }}
+            className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <button
+            onClick={() => setStep("schedule")}
+            className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
+          >
+            Continue
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  };
+
   const renderScheduleStep = () => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -697,148 +931,39 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
       <div className="p-4 bg-white/5 rounded-xl border border-white/10">
         <p className="text-sm text-gray-400">
           {data.scheduleType === "weekdays" 
-            ? "📊 5 days × 52 weeks = ~260 learning days in 2026"
-            : "📊 7 days × 52 weeks = ~365 learning days in 2026"}
+            ? `📊 5 days/week for ${data.timelineDays} days = ~${Math.round(data.timelineDays * 5 / 7)} learning days`
+            : `📊 7 days/week for ${data.timelineDays} days = ${data.timelineDays} learning days`}
         </p>
       </div>
 
       <div className="flex gap-3 pt-4">
+        <button
+          onClick={() => setStep("timeline")}
+          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
         <button
           onClick={() => {
-            // If using custom curriculum, go back to goal step (no questions)
-            if (data.useCustomCurriculum) {
-              setStep("goal");
+            // Auto-set time commitment from AI suggestion if available
+            if (data.analysis?.suggestedTimeCommitment && !data.timeCommitment) {
+              setData((prev) => ({ ...prev, timeCommitment: data.analysis?.suggestedTimeCommitment || "1hr-daily" }));
+            } else if (!data.timeCommitment) {
+              setData((prev) => ({ ...prev, timeCommitment: "1hr-daily" }));
+            }
+            // Auto-set experience based on the goal context (intermediate by default)
+            if (!data.experience) {
+              setData((prev) => ({ ...prev, experience: "intermediate" }));
+            }
+            // Only show LeetCode step for Software Development category
+            if (data.selectedCategory === "software") {
+              setStep("leetcode");
             } else {
-              setStep("questions");
-              const effectiveQs = getEffectiveQuestions();
-              setCurrentQuestionIndex(effectiveQs.length - 1);
+              // Skip LeetCode step for non-software categories
+              setStep(authUser ? "review" : "contact");
             }
           }}
-          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <button
-          onClick={() => setStep("time")}
-          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
-        >
-          Continue
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
-    </motion.div>
-  );
-
-  const renderTimeStep = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
-          <Clock className="w-8 h-8 text-teal-400" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Daily Time Commitment</h2>
-        <p className="text-gray-400 mt-2">
-          How much time can you dedicate to learning each day?
-        </p>
-        {data.analysis?.suggestedTimeCommitment && (
-          <p className="text-sm text-teal-400 mt-1">
-            💡 Based on your goal, we suggest: {timeOptions.find((t) => t.value === data.analysis?.suggestedTimeCommitment)?.label || "1 hour/day"}
-          </p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {timeOptions.map((option) => (
-          <button
-            key={option.value}
-            onClick={() => handleTimeCommitmentSelect(option.value)}
-            className={`p-4 rounded-xl border text-center transition-all ${
-              data.timeCommitment === option.value
-                ? "bg-teal-500/20 border-teal-500/50"
-                : "bg-white/5 border-white/10 hover:border-white/20"
-            }`}
-          >
-            <p className="font-semibold text-white">{option.label}</p>
-            <p className="text-sm text-gray-400">{option.description}</p>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex gap-3 pt-4">
-        <button
-          onClick={() => setStep("schedule")}
-          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <button
-          onClick={() => setStep("experience")}
-          disabled={!data.timeCommitment}
-          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-        >
-          Continue
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
-    </motion.div>
-  );
-
-  const renderExperienceStep = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-white">Your Experience Level</h2>
-        <p className="text-gray-400 mt-2">
-          This helps us tailor the difficulty and pace of your plan
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        {experienceLevels.map((level) => (
-          <button
-            key={level.value}
-            onClick={() => handleExperienceSelect(level.value as WizardData["experience"])}
-            className={`w-full p-4 rounded-xl border text-left transition-all ${
-              data.experience === level.value
-                ? "bg-teal-500/20 border-teal-500/50"
-                : "bg-white/5 border-white/10 hover:border-white/20"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  data.experience === level.value ? "border-teal-500 bg-teal-500" : "border-gray-500"
-                }`}
-              >
-                {data.experience === level.value && <Check className="w-3 h-3 text-white" />}
-              </div>
-              <div>
-                <p className="font-medium text-white">{level.label}</p>
-                <p className="text-sm text-gray-400">{level.description}</p>
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex gap-3 pt-4">
-        <button
-          onClick={() => setStep("time")}
-          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <button
-          onClick={() => setStep("leetcode")}
           className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
         >
           Continue
@@ -916,7 +1041,7 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
 
       <div className="flex gap-3 pt-4">
         <button
-          onClick={() => setStep("experience")}
+          onClick={() => setStep("schedule")}
           className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -1056,123 +1181,150 @@ export default function AIFirstWizard({ onComplete, authUser }: Readonly<{ onCom
     </motion.div>
   );
 
-  const renderReviewStep = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-white">Review Your Plan</h2>
-        <p className="text-gray-400 mt-2">Make sure everything looks good</p>
-      </div>
-
-      <div className="space-y-4">
-        {/* Goal Summary */}
-        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-white flex items-center gap-2">
-              <span className="text-2xl">{data.analysis?.categoryIcon}</span>
-              {data.analysis?.categoryName}
-            </h3>
-          </div>
-          <p className="text-gray-400 text-sm mt-2">{data.goal}</p>
+  const renderReviewStep = () => {
+    const timelinePreset = TIMELINE_PRESETS.find(p => p.days === data.timelineDays);
+    const endDate = new Date(new Date(data.startDate).getTime() + data.timelineDays * 24 * 60 * 60 * 1000);
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white">Review Your Plan</h2>
+          <p className="text-gray-400 mt-2">Make sure everything looks good</p>
         </div>
 
-        {/* AI Answers - Always visible */}
-        {data.analysis?.questions.map((q) => {
-          const answer = data.answers[q.id];
-          const otherInput = data.otherInputs[q.id];
-          
-          // Build display labels, replacing "other" with custom input if available
-          const answerLabels = getQuestionAnswerLabel(q, answer, otherInput);
-
-          return (
-            <div key={q.id} className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <p className="text-sm text-gray-400">{q.question}</p>
-              <p className="text-white mt-1 font-medium">{answerLabels || "Not answered"}</p>
+        <div className="space-y-4">
+          {/* Category & Goal Summary */}
+          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-white flex items-center gap-2">
+                <span className="text-2xl">{selectedCategoryConfig?.icon || data.analysis?.categoryIcon}</span>
+                {selectedCategoryConfig?.name || data.analysis?.categoryName}
+              </h3>
             </div>
-          );
-        })}
+            <p className="text-gray-400 text-sm mt-2">{data.goal}</p>
+          </div>
 
-        {/* Quick Summary */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-            <p className="text-xs text-gray-500">Schedule</p>
-            <p className="text-white font-medium">
-              {data.scheduleType === "weekdays" ? "5 Days/Week" : "7 Days/Week"}
-            </p>
+          {/* Timeline Summary */}
+          <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-purple-400" />
+              <span className="text-purple-400 font-medium">Timeline</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-gray-500">Duration</p>
+                <p className="text-white font-medium">{timelinePreset?.label || `${data.timelineDays} days`}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Start</p>
+                <p className="text-white font-medium">{new Date(data.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">End</p>
+                <p className="text-white font-medium">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              </div>
+            </div>
           </div>
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-            <p className="text-xs text-gray-500">Time</p>
-            <p className="text-white font-medium">
-              {timeOptions.find((t) => t.value === data.timeCommitment)?.label}
-            </p>
+
+          {/* AI Answers - Always visible */}
+          {data.analysis?.questions.map((q) => {
+            const answer = data.answers[q.id];
+            const otherInput = data.otherInputs[q.id];
+            
+            // Build display labels, replacing "other" with custom input if available
+            const answerLabels = getQuestionAnswerLabel(q, answer, otherInput);
+
+            return (
+              <div key={q.id} className="p-3 bg-white/5 rounded-xl border border-white/10">
+                <p className="text-sm text-gray-400">{q.question}</p>
+                <p className="text-white mt-1 font-medium">{answerLabels || "Not answered"}</p>
+              </div>
+            );
+          })}
+
+          {/* Quick Summary */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+              <p className="text-xs text-gray-500">Schedule</p>
+              <p className="text-white font-medium">
+                {data.scheduleType === "weekdays" ? "5 Days/Week" : "7 Days/Week"}
+              </p>
+            </div>
+            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+              <p className="text-xs text-gray-500">Time</p>
+              <p className="text-white font-medium">
+                {timeOptions.find((t) => t.value === data.timeCommitment)?.label}
+              </p>
+            </div>
+            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+              <p className="text-xs text-gray-500">Experience</p>
+              <p className="text-white font-medium capitalize">{data.experience}</p>
+            </div>
           </div>
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-            <p className="text-xs text-gray-500">Experience</p>
-            <p className="text-white font-medium capitalize">{data.experience}</p>
-          </div>
+
+          {/* LeetCode */}
+          {data.includeLeetCode && (
+            <div className="p-3 bg-orange-500/10 rounded-xl border border-orange-500/20">
+              <p className="text-orange-400 text-sm flex items-center gap-2">
+                <Code className="w-4 h-4" />
+                Daily LeetCode in {leetCodeLanguages.find(l => l.value === data.leetCodeLanguage)?.label}
+              </p>
+            </div>
+          )}
+
+          {(data.email || data.phone) && (
+            <div className="p-3 bg-teal-500/10 rounded-xl border border-teal-500/20">
+              <p className="text-teal-400 text-sm">
+                ✓ {data.firstName ? `Hi ${data.firstName}! ` : ""}Notifications will be sent to {[data.email, data.phone].filter(Boolean).join(" and ")}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* LeetCode */}
-        {data.includeLeetCode && (
-          <div className="p-3 bg-orange-500/10 rounded-xl border border-orange-500/20">
-            <p className="text-orange-400 text-sm flex items-center gap-2">
-              <Code className="w-4 h-4" />
-              Daily LeetCode in {leetCodeLanguages.find(l => l.value === data.leetCodeLanguage)?.label}
-            </p>
-          </div>
-        )}
-
-        {(data.email || data.phone) && (
-          <div className="p-3 bg-teal-500/10 rounded-xl border border-teal-500/20">
-            <p className="text-teal-400 text-sm">
-              ✓ {data.firstName ? `Hi ${data.firstName}! ` : ""}Notifications will be sent to {[data.email, data.phone].filter(Boolean).join(" and ")}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-3 pt-4">
-        <button
-          onClick={() => setStep(authUser ? "leetcode" : "contact")}
-          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-70 transition-all flex items-center justify-center gap-2"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Generating Plan...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5" />
-              Generate My 12-Month Plan
-            </>
-          )}
-        </button>
-      </div>
-    </motion.div>
-  );
+        <div className="flex gap-3 pt-4">
+          <button
+            onClick={() => setStep(authUser ? "leetcode" : "contact")}
+            className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-70 transition-all flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Generating Plan...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5" />
+                Generate My Plan
+              </>
+            )}
+          </button>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-4">
       <div className="w-full max-w-xl">
         <AnimatePresence mode="wait">
+          {step === "category" && renderCategoryStep()}
           {step === "goal" && renderGoalStep()}
           {step === "analyzing" && renderAnalyzingStep()}
           {step === "questions" && renderQuestionsStep()}
+          {step === "timeline" && renderTimelineStep()}
           {step === "schedule" && renderScheduleStep()}
-          {step === "time" && renderTimeStep()}
-          {step === "experience" && renderExperienceStep()}
           {step === "leetcode" && renderLeetCodeStep()}
           {step === "contact" && renderContactStep()}
           {step === "review" && renderReviewStep()}

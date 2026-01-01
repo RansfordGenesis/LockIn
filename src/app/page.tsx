@@ -7,8 +7,8 @@ import AIFirstWizard from "@/components/wizard/AIFirstWizard";
 import DailyFocusView from "@/components/daily/DailyFocusView";
 import DashboardView from "@/components/dashboard/DashboardView";
 import FullYearPlanView from "@/components/curriculum/FullYearPlanView";
+import { PlanSidebar, PlanDropdown } from "@/components/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Target, Sparkles } from "lucide-react";
 import type { GoalInput, DayPlan } from "@/types/plan";
 
 // Auth user info passed from AuthScreen
@@ -24,7 +24,7 @@ export default function Home() {
   const [showCurriculum, setShowCurriculum] = useState(false);
   const [dashboardViewMode, setDashboardViewMode] = useState<"overview" | "weekly" | "monthly" | "quarterly">("overview");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  
+
   const {
     currentView,
     setCurrentView,
@@ -42,9 +42,28 @@ export default function Home() {
     setIsGenerating,
     setGenerationError,
     clearPlan,
+    clearAll,
     setGoalInput,
     restoreUserState,
+    // Multi-plan state
+    plans,
+    setPlans,
+    activePlanId,
+    setActivePlanId,
+    removePlanSummary,
+    user,
+    isCreatingPlan,
+    setIsCreatingPlan,
+    setGlobalStats,
   } = useAppStore();
+
+  // Auto-redirect to daily view if user has a plan and is on landing page
+  // This handles the case where currentView wasn't persisted in older versions
+  React.useEffect(() => {
+    if (currentView === "landing" && plan && user) {
+      setCurrentView("daily");
+    }
+  }, [currentView, plan, user, setCurrentView]);
 
   // Helper type for new plan format
   interface NewPlanFormat {
@@ -65,7 +84,7 @@ export default function Home() {
   // Get today's plan from the full plan structure (supports both old and new formats)
   const todaysPlan = useMemo((): DayPlan | null => {
     if (!plan) return null;
-    
+
     // Helper: Build DayPlan from new format tasks
     const buildDayPlanFromNewFormat = (tasks: NewPlanFormat['dailyTasks']): DayPlan => ({
       id: currentDate,
@@ -99,30 +118,35 @@ export default function Home() {
     const findDayInOldFormat = (quarters: OldFormatQuarter[]): DayPlan | null => {
       for (const quarter of quarters) {
         if (!quarter.months) continue;
-        
+
         for (const month of quarter.months) {
           if (!month.weeks) continue;
-          
+
           const day = month.weeks.flatMap(w => w.days || []).find(d => d.date === currentDate);
           if (day) return day;
         }
       }
       return null;
     };
-    
+
     // Check for new format (flat dailyTasks array)
     if ('dailyTasks' in plan && Array.isArray((plan as NewPlanFormat).dailyTasks)) {
       const newPlan = plan as NewPlanFormat;
       const todaysTasks = newPlan.dailyTasks.filter(t => t.date === currentDate);
       return todaysTasks.length > 0 ? buildDayPlanFromNewFormat(todaysTasks) : null;
     }
-    
+
     // Old format (nested quarters structure)
     return Array.isArray(plan.quarters) ? findDayInOldFormat(plan.quarters) : null;
   }, [plan, currentDate]);
 
   // Get completed task IDs as Set
   const completedTaskIds = useMemo(() => new Set(Object.keys(completedTasks)), [completedTasks]);
+
+  // Get active plan summary
+  const activePlanSummary = useMemo(() => {
+    return plans.find(p => p.planId === activePlanId) || null;
+  }, [plans, activePlanId]);
 
   // Define wizard data interface matching AIFirstWizard output
   interface WizardData {
@@ -142,7 +166,7 @@ export default function Home() {
       suggestedTimeCommitment: string;
     } | null;
     answers: Record<string, string | string[]>;
-    otherInputs: Record<string, string>; // Custom "Other" text inputs
+    otherInputs: Record<string, string>;
     timeCommitment: string;
     experience: "beginner" | "intermediate" | "advanced";
     constraints: string[];
@@ -155,6 +179,10 @@ export default function Home() {
     leetCodeLanguage: string;
     customCurriculum: string;
     useCustomCurriculum: boolean;
+    // Timeline fields
+    selectedCategory: string | null;
+    startDate: string;
+    timelineDays: number;
   }
 
   // Handle auth success - either go to wizard (new user) or daily view (existing user with plan)
@@ -176,9 +204,9 @@ export default function Home() {
         });
 
         const loginData = await loginResponse.json();
-        
+
         if (loginData.success && loginData.plan) {
-          // Set user and plan
+          // Set user
           setUser({
             userId: loginData.user.email,
             email: loginData.user.email,
@@ -200,17 +228,29 @@ export default function Home() {
             completedDays: 0,
           });
 
+          // Set plans list and active plan ID
+          if (loginData.plans) {
+            setPlans(loginData.plans);
+            setActivePlanId(loginData.activePlanId);
+          }
+
+          // Set global stats
+          if (loginData.globalStats) {
+            setGlobalStats(loginData.globalStats);
+          }
+
           setPlan(loginData.plan);
-          
+
           // Restore user state
           if (loginData.userState) {
             restoreUserState(loginData.userState);
           }
-          
+
           setCurrentView("daily");
         } else if (loginData.needsPlan) {
           // User exists but has no plan - go to wizard
           setAuthUser(authData);
+          setPlans(loginData.plans || []);
           setCurrentView("wizard");
         }
       } catch (error) {
@@ -222,9 +262,84 @@ export default function Home() {
     }
   };
 
+  // Handle plan switch
+  const handlePlanSwitch = async (planId: string) => {
+    if (!user?.email || planId === activePlanId) return;
+
+    try {
+      // Fetch the plan data
+      const response = await fetch(`/api/plans/${planId}?email=${user.email}`);
+      const data = await response.json();
+
+      if (data.success && data.plan) {
+        // Update store
+        setActivePlanId(planId);
+        setPlan(data.plan);
+
+        // Restore progress for this plan
+        restoreUserState({
+          completedTasks: data.plan.completedTasks || {},
+          totalPoints: data.plan.earnedPoints || 0,
+          currentStreak: data.plan.currentStreak || 0,
+          longestStreak: data.plan.longestStreak || 0,
+          lastCheckIn: data.plan.lastCheckIn || null,
+          dailyCheckIns: data.plan.dailyCheckIns || {},
+        });
+
+        // Switch active on server
+        await fetch(`/api/plans/${planId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: user.email,
+            action: "switch",
+          }),
+        });
+      }
+    } catch (error) {
+      console.error("Error switching plan:", error);
+    }
+  };
+
+  // Handle add new plan
+  const handleAddPlan = () => {
+    setIsCreatingPlan(true);
+    setCurrentView("wizard");
+  };
+
+  // Handle delete plan
+  const handleDeletePlan = async (planId: string) => {
+    if (!user?.email) return;
+
+    try {
+      const response = await fetch(`/api/plans/${planId}?email=${user.email}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        removePlanSummary(planId);
+
+        // If deleted active plan, switch to another
+        if (planId === activePlanId && data.plans?.length > 0) {
+          handlePlanSwitch(data.activePlanId);
+        } else if (data.plans?.length === 0) {
+          // No plans left - go to wizard
+          clearPlan();
+          setCurrentView("wizard");
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting plan:", error);
+    }
+  };
+
   // Handle AI-first wizard completion
   const handleWizardComplete = async (wizardData: WizardData) => {
-    if (!authUser) {
+    const currentAuthUser = authUser || (user ? { email: user.email, name: user.name || "", phone: user.phoneNumber, isNewUser: false } : null);
+
+    if (!currentAuthUser) {
       setGenerationError("Authentication required. Please sign in first.");
       setCurrentView("landing");
       return;
@@ -234,7 +349,6 @@ export default function Home() {
     setGenerationError(null);
 
     // Convert wizard data to GoalInput format
-    // Merge answers with otherInputs - replace "other" values with custom text
     const mergedAnswers: Record<string, string | string[]> = {};
     Object.entries(wizardData.answers).forEach(([key, value]) => {
       if (Array.isArray(value)) {
@@ -252,7 +366,7 @@ export default function Home() {
     });
 
     const goalInput: GoalInput = {
-      category: wizardData.analysis?.detectedCategory || "custom",
+      category: wizardData.selectedCategory || wizardData.analysis?.detectedCategory || "custom",
       categoryName: wizardData.analysis?.categoryName,
       primaryGoal: wizardData.goal,
       subGoals: [],
@@ -262,17 +376,19 @@ export default function Home() {
       experienceLevel: wizardData.experience,
       constraints: wizardData.constraints,
       customCurriculum: wizardData.useCustomCurriculum ? wizardData.customCurriculum : undefined,
+      // Timeline configuration
+      startDate: wizardData.startDate,
+      totalDays: wizardData.timelineDays,
     };
 
     setGoalInput(goalInput);
 
     try {
-      // Use auth user data (already verified)
-      const userName = authUser.name;
-      const userEmail = authUser.email;
-      const userPhone = authUser.phone;
+      const userName = currentAuthUser.name;
+      const userEmail = currentAuthUser.email;
+      const userPhone = currentAuthUser.phone;
 
-      // Generate the complete plan (260/365 unique daily tasks)
+      // Generate the complete plan
       const planResponse = await fetch("/api/generate-enhanced-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -280,6 +396,9 @@ export default function Home() {
           goalInput,
           includeLeetCode: wizardData.includeLeetCode,
           leetCodeLanguage: wizardData.leetCodeLanguage,
+          // Pass timeline config
+          startDate: wizardData.startDate,
+          totalDays: wizardData.timelineDays,
         }),
       });
 
@@ -288,70 +407,121 @@ export default function Home() {
         throw new Error(planData.error || "Failed to generate plan");
       }
 
-      // Create user with complete plan data (email is primary key)
-      const userResponse = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: userEmail,
-          phoneNumber: userPhone,
-          name: userName,
-          // Include complete plan data
+      // Check if this is a new user or adding a plan
+      if (isCreatingPlan && user) {
+        // Existing user adding a new plan
+        const planDocument = {
           planId: planData.plan.planId,
           planTitle: planData.plan.planTitle,
           planDescription: planData.plan.planDescription,
           planCategory: planData.plan.planCategory,
+          planIcon: planData.plan.planIcon || "✨",
+          startDate: planData.plan.startDate,
+          endDate: planData.plan.endDate,
+          totalDays: planData.plan.totalDays,
           scheduleType: planData.plan.scheduleType,
           timeCommitment: planData.plan.timeCommitment,
+          experienceLevel: wizardData.experience,
           includeLeetCode: planData.plan.includeLeetCode,
-          totalDays: planData.plan.totalDays,
+          leetCodeLanguage: wizardData.leetCodeLanguage,
           dailyTasks: planData.plan.dailyTasks,
           monthlyThemes: planData.plan.monthlyThemes,
-        }),
-      });
+          completedTasks: {},
+          totalPoints: 0,
+          earnedPoints: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          lastCheckIn: null,
+          dailyCheckIns: {},
+          quizAttempts: [],
+          leetCodeSubmissions: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
 
-      const userData = await userResponse.json();
-      if (!userData.success) {
-        throw new Error(userData.error || "Failed to create account");
+        const addPlanResponse = await fetch("/api/plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userEmail,
+            plan: planDocument,
+          }),
+        });
+
+        const addPlanData = await addPlanResponse.json();
+        if (!addPlanData.success) {
+          throw new Error(addPlanData.error || "Failed to add plan");
+        }
+
+        setPlans(addPlanData.plans);
+        setActivePlanId(planData.plan.planId);
+        setPlan(planData.plan);
+        setIsCreatingPlan(false);
+      } else {
+        // New user - create user with first plan
+        const userResponse = await fetch("/api/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userEmail,
+            phoneNumber: userPhone,
+            name: userName,
+            planId: planData.plan.planId,
+            planTitle: planData.plan.planTitle,
+            planDescription: planData.plan.planDescription,
+            planCategory: planData.plan.planCategory,
+            planIcon: planData.plan.planIcon || "✨",
+            scheduleType: planData.plan.scheduleType,
+            timeCommitment: planData.plan.timeCommitment,
+            includeLeetCode: planData.plan.includeLeetCode,
+            totalDays: planData.plan.totalDays,
+            dailyTasks: planData.plan.dailyTasks,
+            monthlyThemes: planData.plan.monthlyThemes,
+          }),
+        });
+
+        const userData = await userResponse.json();
+        if (!userData.success) {
+          throw new Error(userData.error || "Failed to create account");
+        }
+
+        // Set local user state
+        setUser({
+          userId: userEmail,
+          email: userEmail,
+          phoneNumber: userPhone,
+          name: userName,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          settings: {
+            scheduleType: goalInput.scheduleType,
+            timeCommitment: goalInput.timeCommitment,
+            reminderTime: "09:00",
+            timezone: "Africa/Accra",
+            emailNotifications: true,
+            smsNotifications: true,
+          },
+          currentStreak: 0,
+          longestStreak: 0,
+          totalPoints: 0,
+          completedDays: 0,
+        });
+
+        setPlan(planData.plan);
+
+        // Send welcome SMS/Email
+        fetch("/api/send-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phoneNumber: userPhone,
+            email: userEmail,
+            planTitle: planData.plan.planTitle,
+            userName: userName,
+          }),
+        }).catch(console.error);
       }
 
-      // Set local user state
-      setUser({
-        userId: userEmail,
-        email: userEmail,
-        phoneNumber: userPhone,
-        name: userName,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        settings: {
-          scheduleType: goalInput.scheduleType,
-          timeCommitment: goalInput.timeCommitment,
-          reminderTime: "09:00",
-          timezone: "Africa/Accra",
-          emailNotifications: true,
-          smsNotifications: true,
-        },
-        currentStreak: 0,
-        longestStreak: 0,
-        totalPoints: 0,
-        completedDays: 0,
-      });
-
-      // Set plan in store (new format with dailyTasks array)
-      setPlan(planData.plan);
-      
-      // Send welcome SMS/Email
-      fetch("/api/send-welcome", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: userPhone,
-          email: userEmail,
-          planTitle: planData.plan.planTitle,
-          userName: userName,
-        }),
-      }).catch(console.error); // Fire and forget
-      
       setCurrentView("daily");
     } catch (error) {
       console.error("Error:", error);
@@ -373,7 +543,7 @@ export default function Home() {
 
   // Handle logout - clear local state and go to auth screen
   const handleLogout = () => {
-    clearPlan(); // This now also clears user, points, streaks, etc.
+    clearAll();
     setAuthUser(null);
     setShowDashboard(false);
     setShowCurriculum(false);
@@ -386,189 +556,148 @@ export default function Home() {
     return today.toISOString().split('T')[0];
   };
 
+  // Check if user is authenticated with plans
+  const isAuthenticated = user && plans.length > 0 && plan;
+
   // Main render
   return (
-    <AnimatePresence mode="wait">
-      {/* Auth Screen - First thing users see if not authenticated */}
-      {!authUser && !plan && currentView === "landing" && (
-          <motion.div
-            key="auth"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <AuthScreen onAuthSuccess={handleAuthSuccess} />
-          </motion.div>
+    <div className="flex min-h-screen bg-[#0a0a0c]">
+      {/* Desktop Sidebar - Only show when authenticated and has plans */}
+      {isAuthenticated && currentView === "daily" && (
+        <aside className="hidden md:flex w-60 flex-col flex-shrink-0">
+          <PlanSidebar
+            plans={plans}
+            activePlanId={activePlanId}
+            onPlanSelect={handlePlanSwitch}
+            onAddPlan={handleAddPlan}
+            onDeletePlan={handleDeletePlan}
+            userName={user?.name}
+            onLogout={handleLogout}
+          />
+        </aside>
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Header with Dropdown - Only show when authenticated */}
+        {isAuthenticated && currentView === "daily" && !showDashboard && !showCurriculum && (
+          <header className="md:hidden p-4 border-b border-white/10">
+            <PlanDropdown
+              plans={plans}
+              activePlan={activePlanSummary}
+              onPlanSelect={handlePlanSwitch}
+              onAddPlan={handleAddPlan}
+              onLogout={handleLogout}
+            />
+          </header>
         )}
 
-      {/* Welcome Back (has plan - returning user with local data) */}
-      {currentView === "landing" && plan && (
-        <motion.div
-          key="welcome"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <WelcomeBackPage
-            onContinue={() => setCurrentView("daily")}
-            onNewPlan={clearPlan}
-            totalPoints={totalPoints}
-            currentStreak={currentStreak}
-          />
-        </motion.div>
-      )}
+        {/* View Content */}
+        <div className="flex-1">
+          <AnimatePresence mode="wait">
+            {/* Auth Screen - First thing users see if not authenticated */}
+            {!authUser && !plan && currentView === "landing" && (
+              <motion.div
+                key="auth"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <AuthScreen onAuthSuccess={handleAuthSuccess} />
+              </motion.div>
+            )}
 
-      {/* Wizard */}
-      {currentView === "wizard" && authUser && (
-        <motion.div
-          key="wizard"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          {isGenerating ? (
-            <GeneratingPage />
-          ) : (
-            <AIFirstWizard 
-              onComplete={handleWizardComplete} 
-              authUser={authUser}
-            />
-          )}
-        </motion.div>
-      )}
+            {/* Wizard */}
+            {currentView === "wizard" && (authUser || user) && (
+              <motion.div
+                key="wizard"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {isGenerating ? (
+                  <GeneratingPage />
+                ) : (
+                  <AIFirstWizard
+                    onComplete={handleWizardComplete}
+                    onCancel={plans.length > 0 ? () => setCurrentView("daily") : undefined}
+                    authUser={authUser || { email: user!.email, name: user!.name || "", phone: user!.phoneNumber, isNewUser: false }}
+                  />
+                )}
+              </motion.div>
+            )}
 
-      {/* Daily View (Main Focus) */}
-      {currentView === "daily" && plan && !showDashboard && !showCurriculum && (
-        <motion.div
-          key="daily"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <DailyFocusView
-            currentDate={currentDate}
-            dayPlan={todaysPlan}
-            completedTasks={completedTaskIds}
-            totalPoints={totalPoints}
-            currentStreak={currentStreak}
-            onCompleteTask={handleCompleteTask}
-            onDateChange={handleDateChange}
-            onLogout={handleLogout}
-            onViewChange={(view) => {
-              if (view === "weekly" || view === "monthly" || view === "quarterly") {
-                // Reset to today's date when opening dashboard
-                setCurrentDate(getTodayDate());
-                setDashboardViewMode(view);
-                setShowDashboard(true);
-              } else if (view === "curriculum") {
-                setShowCurriculum(true);
-              }
-            }}
-          />
-        </motion.div>
-      )}
+            {/* Daily View (Main Focus) */}
+            {currentView === "daily" && plan && !showDashboard && !showCurriculum && (
+              <motion.div
+                key="daily"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <DailyFocusView
+                  currentDate={currentDate}
+                  dayPlan={todaysPlan}
+                  completedTasks={completedTaskIds}
+                  totalPoints={totalPoints}
+                  currentStreak={currentStreak}
+                  onCompleteTask={handleCompleteTask}
+                  onDateChange={handleDateChange}
+                  onLogout={handleLogout}
+                  onViewChange={(view) => {
+                    if (view === "weekly" || view === "monthly" || view === "quarterly") {
+                      setCurrentDate(getTodayDate());
+                      setDashboardViewMode(view);
+                      setShowDashboard(true);
+                    } else if (view === "curriculum") {
+                      setShowCurriculum(true);
+                    }
+                  }}
+                />
+              </motion.div>
+            )}
 
-      {/* Dashboard View */}
-      {currentView === "daily" && plan && showDashboard && !showCurriculum && (
-        <motion.div
-          key="dashboard"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <DashboardView
-            plan={plan}
-            completedTasks={completedTasks}
-            totalPoints={totalPoints}
-            currentStreak={currentStreak}
-            longestStreak={longestStreak}
-            onBack={() => {
-              setShowDashboard(false);
-              setDashboardViewMode("overview");
-            }}
-            viewMode={dashboardViewMode}
-          />
-        </motion.div>
-      )}
+            {/* Dashboard View */}
+            {currentView === "daily" && plan && showDashboard && !showCurriculum && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <DashboardView
+                  plan={plan}
+                  completedTasks={completedTasks}
+                  totalPoints={totalPoints}
+                  currentStreak={currentStreak}
+                  longestStreak={longestStreak}
+                  onBack={() => {
+                    setShowDashboard(false);
+                    setDashboardViewMode("overview");
+                  }}
+                  viewMode={dashboardViewMode}
+                />
+              </motion.div>
+            )}
 
-      {/* Full Year Curriculum View */}
-      {currentView === "daily" && plan && showCurriculum && (
-        <motion.div
-          key="curriculum"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <FullYearPlanView
-            plan={plan}
-            completedTasks={completedTasks}
-            onBack={() => setShowCurriculum(false)}
-          />
-        </motion.div>
-      )}
-      </AnimatePresence>
-  );
-}
-
-// Welcome Back Page
-function WelcomeBackPage({
-  onContinue,
-  onNewPlan,
-  totalPoints,
-  currentStreak,
-}: Readonly<{
-  onContinue: () => void;
-  onNewPlan: () => void;
-  totalPoints: number;
-  currentStreak: number;
-}>) {
-  return (
-    <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center max-w-xl"
-      >
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500">
-            <Target className="w-8 h-8 text-[#0a0a0c]" />
-          </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-500 to-emerald-500 bg-clip-text text-transparent">
-            LockIn
-          </h1>
+            {/* Full Year Curriculum View */}
+            {currentView === "daily" && plan && showCurriculum && (
+              <motion.div
+                key="curriculum"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <FullYearPlanView
+                  plan={plan}
+                  completedTasks={completedTasks}
+                  onBack={() => setShowCurriculum(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-
-        <h2 className="text-2xl font-semibold text-white mb-4">Welcome Back! 👋</h2>
-        
-        <div className="flex justify-center gap-6 mb-8">
-          <div className="text-center">
-            <p className="text-3xl font-bold text-white">{currentStreak}</p>
-            <p className="text-sm text-gray-400">Day Streak</p>
-          </div>
-          <div className="w-px bg-white/10" />
-          <div className="text-center">
-            <p className="text-3xl font-bold text-white">{totalPoints}</p>
-            <p className="text-sm text-gray-400">Total Points</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={onContinue}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-[#0a0a0c] font-medium rounded-xl transition-all"
-          >
-            <Sparkles className="w-5 h-5" />
-            Continue Journey
-          </button>
-        </div>
-
-        <button
-          onClick={onNewPlan}
-          className="mt-6 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Start a new plan instead
-        </button>
-      </motion.div>
+      </main>
     </div>
   );
 }
@@ -577,16 +706,16 @@ function WelcomeBackPage({
 function GeneratingPage() {
   const [seconds, setSeconds] = React.useState(0);
   const [messageIndex, setMessageIndex] = React.useState(0);
-  
+
   const messages = [
     { text: "Analyzing your goals...", emoji: "🎯" },
-    { text: "Mapping the 2026 calendar...", emoji: "📅" },
+    { text: "Mapping your calendar...", emoji: "📅" },
     { text: "Creating personalized daily tasks...", emoji: "✨" },
     { text: "Building recovery weeks...", emoji: "🧘" },
     { text: "Setting up milestones...", emoji: "🏆" },
-    { text: "Calculating points and rewards...", emoji: "⭐" },
+    { text: "Finding learning resources...", emoji: "📚" },
     { text: "Optimizing your learning path...", emoji: "🚀" },
-    { text: "Adding quiz topics...", emoji: "📝" },
+    { text: "Adding practice exercises...", emoji: "📝" },
     { text: "Almost there...", emoji: "🎉" },
   ];
 
@@ -636,7 +765,7 @@ function GeneratingPage() {
             className="absolute inset-2 rounded-full border-4 border-emerald-500/20 border-b-emerald-500"
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <motion.span 
+            <motion.span
               className="text-3xl"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -645,7 +774,7 @@ function GeneratingPage() {
             </motion.span>
           </div>
         </div>
-        
+
         {/* Timer */}
         <div className="mb-6">
           <span className="text-4xl font-bold bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
@@ -653,8 +782,8 @@ function GeneratingPage() {
           </span>
         </div>
 
-        <h2 className="text-2xl font-semibold text-white mb-2">Crafting Your 2026 Journey</h2>
-        
+        <h2 className="text-2xl font-semibold text-white mb-2">Crafting Your Journey</h2>
+
         {/* Current Step */}
         <motion.div
           key={messageIndex}
@@ -684,7 +813,7 @@ function GeneratingPage() {
           transition={{ delay: 2 }}
           className="p-4 bg-white/5 rounded-xl border border-white/10"
         >
-          <p className="text-xs text-gray-500 mb-1">💡 Pro Tip</p>
+          <p className="text-xs text-gray-500 mb-1">Pro Tip</p>
           <p className="text-sm text-gray-300">
             {tips[Math.floor(seconds / 10) % tips.length]}
           </p>

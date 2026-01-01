@@ -27,7 +27,7 @@ export async function generateWithBedrock(prompt: string): Promise<BedrockRespon
 
   const body = JSON.stringify({
     anthropic_version: "bedrock-2023-05-31",
-    max_tokens: 8192,
+    max_tokens: 16384, // Increased for large curriculum generation
     messages: [
       {
         role: "user",

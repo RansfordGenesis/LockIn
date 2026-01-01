@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, addDays, subDays, isToday, parseISO } from "date-fns";
+import { ExternalLink, BookOpen } from "lucide-react";
 import type { DayPlan, Task } from "@/types/plan";
 import QuizModal from "@/components/quiz/QuizModal";
 import LeetCodeModal, { type LeetCodeCompletionDetails } from "@/components/leetcode/LeetCodeModal";
+import ResourcesModal from "@/components/resources/ResourcesModal";
 import { useAppStore } from "@/store/useAppStore";
 
 interface DailyFocusViewProps {
@@ -42,6 +44,7 @@ export default function DailyFocusView({
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [quizTask, setQuizTask] = useState<Task | null>(null);
   const [leetCodeTask, setLeetCodeTask] = useState<Task | null>(null);
+  const [resourcesTask, setResourcesTask] = useState<Task | null>(null);
   const { checkIn, checkStreakReset, longestStreak, addQuizAttempt, addLeetCodeSubmission, plan } = useAppStore();
 
   const date = parseISO(currentDate);
@@ -438,27 +441,98 @@ export default function DailyFocusView({
                           <div className="px-4 pb-4 border-t border-white/10">
                             <p className="text-gray-400 mt-4 mb-4">{task.description}</p>
 
+                            {/* Get Resources Button - Not shown for LeetCode tasks */}
+                            {!isLeetCodeTask(task) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setResourcesTask(task);
+                                }}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500/20 to-emerald-500/20 hover:from-teal-500/30 hover:to-emerald-500/30 text-teal-400 rounded-xl transition-all duration-200 border border-teal-500/30 mb-4 group"
+                              >
+                                <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                <span className="font-medium">Get Learning Resources</span>
+                                <span className="text-xs text-teal-500 ml-auto">AI-powered</span>
+                              </button>
+                            )}
+
                             {task.resources && task.resources.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-sm font-medium text-gray-500">Resources</p>
-                                {task.resources.map((resource) => (
-                                  <a
-                                    key={resource.url}
-                                    href={resource.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                                  >
-                                    <span className="text-sm">
-                                      {resource.type === "video" && "🎥"}
-                                      {resource.type === "article" && "📄"}
-                                      {resource.type === "exercise" && "💻"}
-                                      {resource.type === "project" && "🚀"}
-                                      {resource.type === "documentation" && "📖"}
-                                    </span>
-                                    <span className="text-sm text-teal-400">{resource.title}</span>
-                                  </a>
-                                ))}
+                              <div className="space-y-3 mt-4">
+                                <p className="text-sm font-semibold text-gray-400 flex items-center gap-2">
+                                  <span aria-hidden="true">📚</span>
+                                  <span>Learning Resources</span>
+                                </p>
+                                <div className="grid gap-2">
+                                  {task.resources.map((resource) => {
+                                    // Icon and color mapping for each resource type
+                                    const resourceStyles: Record<string, { icon: string; color: string; bg: string }> = {
+                                      documentation: { icon: "📖", color: "text-blue-400", bg: "bg-blue-500/10 hover:bg-blue-500/20" },
+                                      video: { icon: "🎥", color: "text-red-400", bg: "bg-red-500/10 hover:bg-red-500/20" },
+                                      course: { icon: "🎓", color: "text-purple-400", bg: "bg-purple-500/10 hover:bg-purple-500/20" },
+                                      article: { icon: "📄", color: "text-green-400", bg: "bg-green-500/10 hover:bg-green-500/20" },
+                                      tutorial: { icon: "📝", color: "text-yellow-400", bg: "bg-yellow-500/10 hover:bg-yellow-500/20" },
+                                      exercise: { icon: "💪", color: "text-orange-400", bg: "bg-orange-500/10 hover:bg-orange-500/20" },
+                                      book: { icon: "📚", color: "text-indigo-400", bg: "bg-indigo-500/10 hover:bg-indigo-500/20" },
+                                      podcast: { icon: "🎙️", color: "text-pink-400", bg: "bg-pink-500/10 hover:bg-pink-500/20" },
+                                      tool: { icon: "🔧", color: "text-cyan-400", bg: "bg-cyan-500/10 hover:bg-cyan-500/20" },
+                                      project: { icon: "🚀", color: "text-teal-400", bg: "bg-teal-500/10 hover:bg-teal-500/20" },
+                                    };
+                                    
+                                    const style = resourceStyles[resource.type] || resourceStyles.article;
+                                    
+                                    // Helper for difficulty color
+                                    const getDifficultyColor = (diff: string): string => {
+                                      if (diff === "beginner") return "text-green-400";
+                                      if (diff === "intermediate") return "text-yellow-400";
+                                      return "text-red-400";
+                                    };
+                                    
+                                    return (
+                                      <a
+                                        key={resource.url}
+                                        href={resource.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={`flex items-start gap-3 p-3 rounded-xl ${style.bg} transition-all duration-200 border border-white/5 group`}
+                                      >
+                                        <span className="text-xl mt-0.5">{style.icon}</span>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className={`text-sm font-medium ${style.color} group-hover:underline`}>
+                                              {resource.title}
+                                            </span>
+                                            {resource.source && (
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
+                                                {resource.source}
+                                              </span>
+                                            )}
+                                            {resource.isFree && (
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                                                Free
+                                              </span>
+                                            )}
+                                          </div>
+                                          {resource.description && (
+                                            <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                                              {resource.description}
+                                            </p>
+                                          )}
+                                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                            {resource.estimatedMinutes && (
+                                              <span>⏱️ {resource.estimatedMinutes} min</span>
+                                            )}
+                                            {resource.difficulty && (
+                                              <span className={getDifficultyColor(resource.difficulty)}>
+                                                {resource.difficulty.charAt(0).toUpperCase() + resource.difficulty.slice(1)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-gray-300 flex-shrink-0 mt-1" />
+                                      </a>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
 
@@ -532,6 +606,15 @@ export default function DailyFocusView({
           language={leetCodeLanguage}
           onComplete={handleLeetCodeComplete}
           onClose={() => setLeetCodeTask(null)}
+        />
+      )}
+
+      {/* Resources Modal */}
+      {resourcesTask && (
+        <ResourcesModal
+          task={resourcesTask}
+          category={(plan as { category?: string } | null)?.category || "general"}
+          onClose={() => setResourcesTask(null)}
         />
       )}
     </div>

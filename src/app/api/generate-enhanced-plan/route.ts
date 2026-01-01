@@ -16,15 +16,34 @@ function getMinutesFromCommitment(timeCommitment: string): number {
   return map[timeCommitment] || 60;
 }
 
-// Generate date list for 2026 based on schedule type
-function generate2026Dates(scheduleType: "weekdays" | "fullweek"): { date: string; dayOfWeek: number; month: number; week: number }[] {
+// Generate date list based on schedule type and custom timeline
+function generateDates(
+  scheduleType: "weekdays" | "fullweek",
+  startDate?: string,
+  totalDays?: number
+): { date: string; dayOfWeek: number; month: number; week: number }[] {
   const dates: { date: string; dayOfWeek: number; month: number; week: number }[] = [];
-  let current = new Date(2026, 0, 1); // January 1st, 2026
-  const endDate = new Date(2026, 11, 31);
+  
+  // Parse start date or default to tomorrow
+  let current: Date;
+  if (startDate) {
+    const parts = startDate.split("-");
+    current = new Date(Number.parseInt(parts[0]), Number.parseInt(parts[1]) - 1, Number.parseInt(parts[2]));
+  } else {
+    current = new Date();
+    current = addDays(current, 1); // Start tomorrow
+  }
+  
+  // Calculate end date based on totalDays or default to 365 days
+  const maxDaysToCheck = (totalDays || 365) * 2; // Check more calendar days than needed for weekday schedules
+  const targetDays = totalDays || 365;
+  
   let weekCounter = 1;
   let lastDow = -1;
+  let daysAdded = 0;
+  let daysChecked = 0;
 
-  while (current <= endDate) {
+  while (daysAdded < targetDays && daysChecked < maxDaysToCheck) {
     const dow = getDay(current);
     // Increment week on Sunday
     if (dow === 0 && lastDow !== -1) weekCounter++;
@@ -38,10 +57,143 @@ function generate2026Dates(scheduleType: "weekdays" | "fullweek"): { date: strin
         month: current.getMonth() + 1,
         week: weekCounter,
       });
+      daysAdded++;
     }
     current = addDays(current, 1);
+    daysChecked++;
   }
   return dates;
+}
+
+// Legacy function for backwards compatibility
+function generate2026Dates(scheduleType: "weekdays" | "fullweek"): { date: string; dayOfWeek: number; month: number; week: number }[] {
+  return generateDates(scheduleType, "2026-01-01", scheduleType === "weekdays" ? 260 : 365);
+}
+
+// Resource type for tasks
+type ResourceType = "documentation" | "video" | "course" | "article" | "tutorial" | "exercise" | "book" | "podcast" | "tool";
+
+interface TaskResource {
+  type: ResourceType;
+  title: string;
+  url: string;
+  description?: string;
+  source?: string;
+  estimatedMinutes?: number;
+  difficulty?: DifficultyLevel;
+  isFree?: boolean;
+}
+
+// Type alias for difficulty levels
+type DifficultyLevel = "beginner" | "intermediate" | "advanced";
+
+// Generate relevant resources based on task topic and type
+function generateTaskResources(
+  taskTitle: string,
+  taskType: string,
+  category: string,
+  level: string
+): TaskResource[] {
+  const resources: TaskResource[] = [];
+  const titleLower = taskTitle.toLowerCase();
+  const categoryLower = category.toLowerCase();
+  
+  // Extract keywords from task title
+  const keywords = titleLower.split(/[\s\-:,]+/).filter(w => w.length > 2);
+  const searchQuery = encodeURIComponent(keywords.slice(0, 4).join(" "));
+  
+  // Determine difficulty based on level
+  const getDifficulty = (lvl: string): "beginner" | "intermediate" | "advanced" => {
+    if (lvl === "beginner") return "beginner";
+    if (lvl === "intermediate") return "intermediate";
+    return "advanced";
+  };
+  const difficulty = getDifficulty(level);
+  
+  // Add documentation resource based on technology
+  const docMappings: Record<string, { title: string; url: string; source: string }> = {
+    python: { title: "Python Official Docs", url: "https://docs.python.org/3/", source: "Python.org" },
+    javascript: { title: "MDN JavaScript", url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript", source: "MDN" },
+    typescript: { title: "TypeScript Docs", url: "https://www.typescriptlang.org/docs/", source: "TypeScript" },
+    react: { title: "React Documentation", url: "https://react.dev/", source: "React.dev" },
+    nextjs: { title: "Next.js Docs", url: "https://nextjs.org/docs", source: "Next.js" },
+    "next.js": { title: "Next.js Docs", url: "https://nextjs.org/docs", source: "Next.js" },
+    node: { title: "Node.js Docs", url: "https://nodejs.org/docs/", source: "Node.js" },
+    django: { title: "Django Documentation", url: "https://docs.djangoproject.com/", source: "Django" },
+    fastapi: { title: "FastAPI Docs", url: "https://fastapi.tiangolo.com/", source: "FastAPI" },
+    postgresql: { title: "PostgreSQL Docs", url: "https://www.postgresql.org/docs/", source: "PostgreSQL" },
+    mongodb: { title: "MongoDB Manual", url: "https://www.mongodb.com/docs/manual/", source: "MongoDB" },
+    docker: { title: "Docker Docs", url: "https://docs.docker.com/", source: "Docker" },
+    git: { title: "Git Documentation", url: "https://git-scm.com/doc", source: "Git SCM" },
+    aws: { title: "AWS Documentation", url: "https://docs.aws.amazon.com/", source: "AWS" },
+    css: { title: "MDN CSS", url: "https://developer.mozilla.org/en-US/docs/Web/CSS", source: "MDN" },
+    html: { title: "MDN HTML", url: "https://developer.mozilla.org/en-US/docs/Web/HTML", source: "MDN" },
+    sql: { title: "SQL Tutorial", url: "https://www.w3schools.com/sql/", source: "W3Schools" },
+  };
+  
+  // Add documentation based on detected technology
+  for (const [tech, doc] of Object.entries(docMappings)) {
+    if (titleLower.includes(tech) || categoryLower.includes(tech)) {
+      resources.push({
+        type: "documentation",
+        title: doc.title,
+        url: doc.url,
+        source: doc.source,
+        difficulty,
+        isFree: true,
+      });
+      break;
+    }
+  }
+  
+  // Add video resource for learn tasks
+  if (taskType === "learn" || taskType === "review") {
+    resources.push({
+      type: "video",
+      title: `Learn ${keywords.slice(0, 3).join(" ")}`,
+      url: `https://www.youtube.com/results?search_query=${searchQuery}+tutorial`,
+      source: "YouTube",
+      estimatedMinutes: 15,
+      difficulty,
+      isFree: true,
+    });
+  }
+  
+  // Add practice resource
+  if (taskType === "practice" || taskType === "build") {
+    const practiceResources: Record<string, { title: string; url: string; source: string }> = {
+      python: { title: "Python Exercises", url: "https://www.hackerrank.com/domains/python", source: "HackerRank" },
+      javascript: { title: "JavaScript Practice", url: "https://www.codewars.com/?language=javascript", source: "Codewars" },
+      sql: { title: "SQL Practice", url: "https://www.hackerrank.com/domains/sql", source: "HackerRank" },
+      react: { title: "React Challenges", url: "https://www.frontendmentor.io/", source: "Frontend Mentor" },
+    };
+    
+    for (const [tech, resource] of Object.entries(practiceResources)) {
+      if (titleLower.includes(tech) || categoryLower.includes(tech)) {
+        resources.push({
+          type: "exercise",
+          title: resource.title,
+          url: resource.url,
+          source: resource.source,
+          difficulty,
+          isFree: true,
+        });
+        break;
+      }
+    }
+  }
+  
+  // Add article resource
+  resources.push({
+    type: "article",
+    title: `Guide: ${keywords.slice(0, 3).join(" ")}`,
+    url: `https://dev.to/search?q=${searchQuery}`,
+    source: "Dev.to",
+    difficulty,
+    isFree: true,
+  });
+  
+  return resources.slice(0, 3); // Max 3 resources per task
 }
 
 // Interface for monthly theme
@@ -1337,240 +1489,49 @@ const buildStandardGoalPrompt = (
   totalDays: number,
   scheduleLabel: string,
   preferencesLine: string
-) => `You are an expert technical curriculum architect and career coach with 15+ years of experience designing industry-aligned learning roadmaps for aspiring developers, engineers, and tech professionals.
+) => {
+  // Calculate number of months based on total days
+  const estimatedMonths = Math.ceil(totalDays / 30);
+  const numMonths = Math.min(Math.max(estimatedMonths, 1), 12); // Between 1 and 12 months
+  
+  return `You are an expert curriculum designer. Create a ${numMonths}-month learning plan.
 
-Your task is to generate a HIGHLY STRUCTURED, PRACTICAL, and INDUSTRY-ALIGNED learning roadmap that will transform a learner from their current level to job-ready proficiency.
+GOAL: "${goalText}"
+CATEGORY: ${categoryName}
+LEVEL: ${level}
+DAILY TIME: ${dailyMins} minutes
+DURATION: ${totalDays} days (${scheduleLabel})
+${preferencesLine ? `PREFERENCES: ${preferencesLine}` : ""}
 
-=== LEARNER PROFILE ===
-TARGET ROLE/SKILL: ${categoryName}
-PRIMARY GOAL: ${goalText}
-EXPERIENCE LEVEL: ${level}
-DAILY TIME AVAILABLE: ${dailyMins} minutes
-TOTAL LEARNING DAYS: ${totalDays} (${scheduleLabel})
-${preferencesLine}
+Create a curriculum with monthly themes and 5-6 SAMPLE tasks per month (we'll expand these to fill all days).
 
-=== CORE CURRICULUM OBJECTIVES ===
+RULES:
+- Keep descriptions SHORT (under 15 words)
+- Task titles must be specific and actionable
+- Use real tools/frameworks for "${goalText}"
 
-1. STRUCTURED PROGRESSION: Design a day-based learning plan grouped into logical phases that build upon each other. Never teach advanced concepts before foundations are solid.
-
-2. BALANCED LEARNING MIX:
-   - 40% Theory & Concepts (understanding the "why")
-   - 35% Hands-on Practice (coding exercises, labs)
-   - 15% Projects (building real applications)
-   - 10% Review & Assessment (consolidation, quizzes)
-
-3. INDUSTRY ALIGNMENT:
-   - Use real-world tools, frameworks, and workflows used in actual companies
-   - Include industry best practices from day one
-   - Cover common interview topics and job requirements
-   - Address real problems developers face on the job
-
-4. PROGRESSIVE COMPLEXITY:
-   - Start with fundamentals even for intermediate learners (fills gaps)
-   - Each week should be slightly more challenging than the last
-   - End projects should be portfolio-worthy
-
-5. REVISION & RETENTION:
-   - Every 4th week is a consolidation/review week
-   - Spaced repetition: revisit earlier concepts in later projects
-   - Weekly mini-reviews before moving to new topics
-
-=== 12-MONTH CURRICULUM STRUCTURE ===
-
-Organize the roadmap into these CLEAR PHASES with specific themes:
-
-📚 PHASE 1: CORE FOUNDATIONS (Months 1-2)
-Month 1: "${categoryName} Fundamentals"
-- Core syntax, concepts, and mental models
-- Development environment setup
-- Version control basics (Git)
-- First simple programs/projects
-- Building good habits early
-
-Month 2: "Building Blocks"
-- Data structures relevant to the role
-- Control flow and logic patterns
-- Functions, modules, code organization
-- Debugging and problem-solving skills
-- First mini-project
-
-🔧 PHASE 2: ESSENTIAL TOOLS & TECHNOLOGIES (Months 3-4)
-Month 3: "Tools of the Trade"
-- Primary framework/library deep dive
-- Package management, dependencies
-- Development workflow optimization
-- Reading documentation effectively
-- Integration project
-
-Month 4: "Data & Persistence"
-- Database fundamentals (SQL/NoSQL based on role)
-- Data modeling and relationships
-- CRUD operations mastery
-- Data validation and integrity
-- Database-connected project
-
-⚡ PHASE 3: INTERMEDIATE SKILLS (Months 5-6)
-Month 5: "Real-World Patterns"
-- Design patterns relevant to the role
-- Error handling and edge cases
-- Code organization at scale
-- Performance basics
-- Pattern implementation project
-
-Month 6: "Integration & APIs"
-- Working with external APIs
-- Authentication and authorization basics
-- Third-party service integration
-- Asynchronous programming
-- API-connected project
-
-🚀 PHASE 4: ADVANCED CONCEPTS (Months 7-8)
-Month 7: "Advanced Techniques"
-- Advanced language/framework features
-- Optimization and performance tuning
-- Caching strategies
-- Concurrency/parallelism (if applicable)
-- Performance-focused project
-
-Month 8: "Testing & Quality"
-- Unit testing fundamentals
-- Integration testing
-- Test-driven development (TDD)
-- Code review practices
-- Fully tested project
-
-🛡️ PHASE 5: PROFESSIONAL PRACTICES (Months 9-10)
-Month 9: "Security & Best Practices"
-- Security fundamentals (OWASP Top 10)
-- Secure coding practices
-- Input validation and sanitization
-- Authentication/Authorization deep dive
-- Security-hardened project
-
-Month 10: "DevOps & Deployment"
-- CI/CD pipelines
-- Containerization basics (Docker)
-- Cloud deployment (based on preferences)
-- Monitoring and logging
-- Deployed, production-ready project
-
-🎯 PHASE 6: PORTFOLIO & CAREER (Months 11-12)
-Month 11: "Capstone Project"
-- Full-scale portfolio project
-- Combines all learned skills
-- Real-world complexity
-- Documentation and README
-- Code polish and refactoring
-
-Month 12: "Career Readiness"
-- Portfolio website/GitHub optimization
-- Resume and LinkedIn updates
-- System design basics
-- Technical interview preparation
-- Mock interviews and coding challenges
-
-=== TASK DESIGN RULES ===
-
-DAILY TASK STRUCTURE:
-- Each day has ONE primary focus (not multiple unrelated topics)
-- Task titles must be SPECIFIC and ACTIONABLE (not "Learn Python" but "Master Python list comprehensions with 5 exercises")
-- Include clear success criteria in descriptions
-
-TOPIC SEQUENCING (CRITICAL):
-- Day 1: LEARN new concept (theory + examples)
-- Day 2: PRACTICE the concept (guided exercises)
-- Day 3: APPLY the concept (mini-project or challenge)
-- Day 4: Move to next related topic OR review if complex
-- NEVER scatter practice across non-consecutive days
-
-TASK TYPES:
-- "learn": Reading, watching, understanding concepts (📖)
-- "practice": Coding exercises, drills, repetition (💪)
-- "build": Creating something new, projects (🔨)
-- "review": Consolidation, quizzes, revisiting (🔄)
-
-WEEKLY RHYTHM (for a 5-day week):
-- Days 1-2: Learn new concept
-- Days 3-4: Practice and apply
-- Day 5: Review week's content OR start next topic
-
-MONTHLY RHYTHM:
-- Weeks 1-3: New content with practice
-- Week 4: Consolidation, project work, and review
-
-=== CONTENT ADAPTATION - CRITICAL ===
-
-EXTRACT SPECIFIC TECHNOLOGIES FROM USER PREFERENCES:
-${preferencesLine || "Use industry-standard technologies for " + categoryName}
-
-IMPORTANT: Parse the preferences above and use the EXACT technology names in all task titles!
-For example:
-- If user selected "python" → task titles must say "Python" (not "Basics" or "Programming")
-- If user selected "fastapi" → task titles must say "FastAPI" (not "Framework" or "Web Framework")
-- If user selected "postgresql" → task titles must say "PostgreSQL" (not "Database" or "SQL")
-- If user selected "react" → task titles must say "React" (not "Frontend" or "UI Library")
-
-NEVER use generic terms like:
-❌ "Learn Basics fundamentals"
-❌ "Practice Core Concepts"
-❌ "Build with Framework"
-
-ALWAYS use specific technologies:
-✅ "Learn Python data types and variables"
-✅ "Practice FastAPI route handlers"
-✅ "Build a PostgreSQL-connected CRUD app"
-✅ "Master React useState and useEffect hooks"
-
-FOR ${level.toUpperCase()} LEVEL:
-${getLevelDescriptionText(level)}
-
-=== OUTPUT FORMAT ===
-
-Return ONLY valid JSON with this EXACT structure:
-
+Return ONLY valid JSON:
 {
-  "title": "Compelling plan title (max 8 words, e.g., 'Python Backend Mastery: Zero to Production')",
-  "description": "One inspiring sentence about the transformation journey",
+  "title": "Short title (5 words max)",
+  "description": "One short sentence",
   "monthlyThemes": [
-    {
-      "month": 1,
-      "theme": "Month 1 Theme Name",
-      "focus": "What the learner masters this month",
-      "topics": ["Topic1", "Topic2", "Topic3", "Topic4", "Topic5"],
-      "project": "Specific end-of-month project name"
-    }
+    {"month": 1, "theme": "Theme", "focus": "Focus", "topics": ["T1", "T2", "T3", "T4", "T5"], "project": "Project"}
   ],
   "taskPatterns": [
-    {
-      "month": 1,
-      "tasks": [
-        {
-          "title": "Unique, specific, actionable task title",
-          "description": "Clear instructions: what to do, resources to use, expected outcome",
-          "type": "learn|practice|build|review",
-          "topic": "Which of the 5 monthly topics this relates to"
-        }
-      ]
-    }
+    {"month": 1, "tasks": [
+      {"title": "Task title", "description": "Short desc", "type": "learn", "topic": "T1"}
+    ]}
   ]
 }
 
-=== CRITICAL REQUIREMENTS ===
+CRITICAL:
+1. Generate ALL ${numMonths} months completely
+2. Each month: 5 topics + 5-6 tasks only
+3. Task types: learn, practice, build, review
+4. Keep ALL text concise to avoid truncation
 
-1. ✅ Generate ALL 12 months completely
-2. ✅ Each month has EXACTLY 5 topics that build on each other
-3. ✅ Each month has 22-25 unique tasks (to fill ${scheduleLabel === "weekdays only" ? "~22 weekdays" : "~30 days"})
-4. ✅ Tasks follow CONSECUTIVE learning pattern (learn → practice → apply)
-5. ✅ EVERY task title must be unique across the entire plan
-6. ✅ EVERY task description must be specific and actionable
-7. ✅ Include at least one substantial project per month
-8. ✅ Month 12 MUST include interview prep and job readiness
-9. ✅ Adapt all content to ${categoryName} role specifically
-10. ✅ TASK TITLES MUST INCLUDE SPECIFIC TECHNOLOGY NAMES from preferences (Python, React, FastAPI, etc.) - NEVER generic terms like "Basics" or "Framework"
-
-FINAL CHECK: Before outputting, verify that EVERY task title contains a specific technology name (Python, Django, React, PostgreSQL, etc.) - NOT generic words like "Basics", "Framework", "Fundamentals", "Core Concepts".
-
-Generate a comprehensive, practical, industry-aligned 12-month learning roadmap that will transform the learner into a job-ready ${categoryName}.`;
+${getLevelDescriptionText(level)}`;
+};
 
 // Helper: Parse AI response and clean JSON
 const parseAIResponse = (bedrockResponse: { content: string }) => {
@@ -1583,13 +1544,166 @@ const parseAIResponse = (bedrockResponse: { content: string }) => {
   return text.trim();
 };
 
+// Helper: Try to repair truncated JSON - handles mid-property truncation
+const repairTruncatedJSON = (text: string): string => {
+  // First, find the last valid position where JSON could be closed
+  // Look for the last complete object/array pattern
+  
+  // Remove any incomplete string at the end (truncated mid-string)
+  // Find the last complete property by looking for patterns
+  
+  // Strategy: Work backwards to find a safe truncation point
+  let safeText = text;
+  
+  // Step 1: If ends with incomplete escape sequence, remove it
+  safeText = safeText.replace(/\\+$/, '');
+  
+  // Step 2: Find last complete key-value pair or array element
+  // Look for last occurrence of complete patterns: "key": "value" or "key": number or "key": [...] or "key": {...}
+  
+  // Check if we're in the middle of a string value
+  let quoteCount = 0;
+  for (const char of safeText) {
+    if (char === '"') {
+      // Check if previous char was escape
+      const idx = safeText.indexOf(char);
+      if (idx === 0 || safeText[idx - 1] !== '\\') {
+        quoteCount++;
+      }
+    }
+  }
+  
+  // If odd number of quotes, we're in a string - find and close it
+  if (quoteCount % 2 !== 0) {
+    // Find last quote and check what comes after
+    const lastQuoteIdx = safeText.lastIndexOf('"');
+    const afterQuote = safeText.slice(lastQuoteIdx + 1);
+    
+    // If after quote looks like it should continue (has :, or incomplete value)
+    if (afterQuote.includes(':') && !afterQuote.includes('"')) {
+      // Truncated in the middle of a value string - remove back to last complete property
+      const lastCompleteComma = safeText.lastIndexOf('",');
+      const lastCompleteBrace = safeText.lastIndexOf('"}');
+      const lastCompleteBracket = safeText.lastIndexOf('"]');
+      const lastCompleteNumber = safeText.search(/[0-9]\s*[,}\]]\s*$/);
+      
+      const cutPoint = Math.max(lastCompleteComma + 2, lastCompleteBrace + 2, lastCompleteBracket + 2, lastCompleteNumber + 1);
+      if (cutPoint > 10) {
+        safeText = safeText.slice(0, cutPoint);
+      }
+    } else {
+      // Just close the string
+      safeText += '"';
+    }
+  }
+  
+  // Step 3: Remove trailing incomplete property (key without value)
+  // Pattern: , "key" or { "key" at the end without :
+  safeText = safeText.replace(/,\s*"[^"]*"\s*$/, '');
+  safeText = safeText.replace(/{\s*"[^"]*"\s*$/, '{');
+  
+  // Step 4: Remove trailing colon (property key exists but value doesn't)
+  safeText = safeText.replace(/:\s*$/, ': ""');
+  
+  // Step 5: Remove incomplete array/object starts
+  safeText = safeText.replace(/:\s*\[\s*$/, ': []');
+  safeText = safeText.replace(/:\s*{\s*$/, ': {}');
+  
+  // Step 6: Count and close brackets/braces
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+  
+  for (const char of safeText) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"' && !escaped) {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+    }
+  }
+  
+  // Step 7: Remove trailing commas before we close
+  safeText = safeText.replace(/,\s*$/, '');
+  
+  // Step 8: Close any unclosed brackets/braces
+  while (openBrackets > 0) {
+    safeText += ']';
+    openBrackets--;
+  }
+  while (openBraces > 0) {
+    safeText += '}';
+    openBraces--;
+  }
+  
+  // Step 9: Final cleanup - remove trailing commas before closing brackets
+  safeText = safeText.replace(/,(\s*[\]}])/g, '$1');
+  
+  return safeText;
+};
+
+// Helper: Extract partial data from malformed JSON
+const extractPartialPlan = (text: string): { monthlyThemes: MonthlyTheme[]; taskPatterns: { month: number; tasks: TaskPattern[] }[] } | null => {
+  try {
+    // Try to extract monthlyThemes array
+    const themesMatch = text.match(/"monthlyThemes"\s*:\s*\[([\s\S]*?)\](?=\s*,\s*"taskPatterns")/);
+    const patternsMatch = text.match(/"taskPatterns"\s*:\s*\[([\s\S]*)/);
+    
+    if (!themesMatch) return null;
+    
+    // Parse themes
+    let themesJson = '[' + themesMatch[1] + ']';
+    themesJson = repairTruncatedJSON(themesJson);
+    const monthlyThemes = JSON.parse(themesJson);
+    
+    // Try to parse patterns (may be incomplete)
+    let taskPatterns: { month: number; tasks: TaskPattern[] }[] = [];
+    if (patternsMatch) {
+      let patternsJson = '[' + patternsMatch[1];
+      patternsJson = repairTruncatedJSON(patternsJson);
+      try {
+        taskPatterns = JSON.parse(patternsJson);
+      } catch {
+        // If patterns fail, we'll generate them from themes
+        taskPatterns = [];
+      }
+    }
+    
+    return { monthlyThemes, taskPatterns };
+  } catch {
+    return null;
+  }
+};
+
+// Task pattern type with optional AI-generated resources
+interface TaskPattern {
+  title: string;
+  description: string;
+  type: string;
+  topic: string;
+  resources?: { name: string; url: string; type: string }[];
+}
+
 // Helper: Create unique task from pattern with better variety
 const createTaskFromPattern = (
-  patternTasks: { title: string; description: string; type: string; topic: string }[],
+  patternTasks: TaskPattern[],
   index: number,
   month: number,
   monthTheme: MonthlyTheme | undefined
-) => {
+): TaskPattern => {
   // If we have a task for this index, use it directly
   if (index < patternTasks.length) {
     return patternTasks[index];
@@ -1600,21 +1714,31 @@ const createTaskFromPattern = (
   const topics = monthTheme?.topics || ["Core Concepts", "Fundamentals", "Practice", "Application", "Review"];
   const topicIndex = index % topics.length;
   const topic = topics[topicIndex];
-  const cycleNumber = Math.floor(index / Math.max(patternTasks.length, 5)) + 1;
+  const dayInMonth = index + 1;
   
-  // Create varied task titles based on cycle and type
-  const taskVariants = [
-    { prefix: "Deep Dive:", suffix: "advanced concepts", type: "learn" },
-    { prefix: "Hands-On:", suffix: "practical exercises", type: "practice" },
-    { prefix: "Build:", suffix: "mini-project", type: "build" },
-    { prefix: "Review:", suffix: "key concepts", type: "review" },
-    { prefix: "Apply:", suffix: "real-world scenario", type: "practice" },
+  // Create diverse action verbs and task structures
+  const actions = [
+    { verb: "Master", suffix: "through hands-on practice", type: "practice" },
+    { verb: "Implement", suffix: "from scratch", type: "build" },
+    { verb: "Debug and optimize", suffix: "code", type: "practice" },
+    { verb: "Create a project using", suffix: "", type: "build" },
+    { verb: "Review and document", suffix: "learnings", type: "review" },
+    { verb: "Explore advanced", suffix: "techniques", type: "learn" },
+    { verb: "Build a mini-app with", suffix: "", type: "build" },
+    { verb: "Practice", suffix: "with real examples", type: "practice" },
+    { verb: "Solve challenges using", suffix: "", type: "practice" },
+    { verb: "Write tests for", suffix: "code", type: "build" },
   ];
   
-  const variant = taskVariants[index % taskVariants.length];
-  const title = `${variant.prefix} ${topic} - Part ${cycleNumber}`;
-  const themeText = monthTheme?.theme || "Month " + month;
-  const description = `Focus on ${topic} ${variant.suffix} for ${themeText}`;
+  const actionIndex = (index + month) % actions.length;
+  const action = actions[actionIndex];
+  
+  // Create unique title combining action, topic, and context
+  const themeText = monthTheme?.theme || `Month ${month} Focus`;
+  const title = action.suffix 
+    ? `${action.verb} ${topic} ${action.suffix}` 
+    : `${action.verb} ${topic}`;
+  const description = `Day ${dayInMonth}: Focus on ${topic} as part of ${themeText}. Complete this task to build practical skills.`;
   
   return {
     title,
@@ -1638,8 +1762,11 @@ export async function POST(request: NextRequest) {
     }
 
     const scheduleType = goalInput.scheduleType || "weekdays";
-    const dates = generate2026Dates(scheduleType);
-    const totalDays = dates.length; // 260 for weekdays, 365 for fullweek
+    // Use custom startDate and totalDays if provided, otherwise use defaults
+    const customStartDate = goalInput.startDate;
+    const customTotalDays = goalInput.totalDays;
+    const dates = generateDates(scheduleType, customStartDate, customTotalDays);
+    const totalDays = dates.length;
     const dailyMins = getMinutesFromCommitment(goalInput.timeCommitment);
     
     // Build context from user selections
@@ -1675,7 +1802,7 @@ export async function POST(request: NextRequest) {
 
     // Call Bedrock
     const bedrockResponse = await generateWithBedrock(prompt);
-    const text = parseAIResponse(bedrockResponse);
+    let text = parseAIResponse(bedrockResponse);
 
     let aiPlan: {
       title: string;
@@ -1687,19 +1814,64 @@ export async function POST(request: NextRequest) {
     try {
       aiPlan = JSON.parse(text);
       if (!aiPlan.monthlyThemes || !aiPlan.taskPatterns || aiPlan.taskPatterns.length === 0) {
+        console.error("Invalid AI response structure:", { 
+          hasMonthlyThemes: !!aiPlan.monthlyThemes, 
+          hasTaskPatterns: !!aiPlan.taskPatterns,
+          taskPatternsLength: aiPlan.taskPatterns?.length 
+        });
         throw new Error("Invalid AI response structure");
       }
-    } catch {
-      const category = goalInput.categoryName || goalInput.category || "Programming";
-      const goal = goalInput.primaryGoal || goalInput.customGoal || category;
-      const categoryTasks = generateCategorySpecificTasks(category, goal, goalInput.experienceLevel);
-      
-      aiPlan = {
-        title: `${category} Mastery 2026`,
-        description: `A comprehensive 12-month journey to master ${goal}`,
-        monthlyThemes: categoryTasks.monthlyThemes,
-        taskPatterns: categoryTasks.taskPatterns,
-      };
+      console.log(`AI generated plan with ${aiPlan.taskPatterns.length} month patterns`);
+    } catch (parseError) {
+      // Try to repair truncated JSON
+      console.log("First parse failed, attempting to repair truncated JSON...");
+      try {
+        const repairedText = repairTruncatedJSON(text);
+        aiPlan = JSON.parse(repairedText);
+        if (!aiPlan.monthlyThemes || !aiPlan.taskPatterns) {
+          throw new Error("Repaired JSON still invalid");
+        }
+        console.log(`Repaired JSON successfully! Got ${aiPlan.taskPatterns?.length || 0} month patterns`);
+      } catch (repairError) {
+        console.error("Failed to parse AI response:", parseError);
+        console.error("Repair also failed:", repairError);
+        console.error("Raw AI response (first 500 chars):", text.substring(0, 500));
+        
+        // Try to extract partial data as last resort
+        console.log("Attempting partial data extraction...");
+        const partialData = extractPartialPlan(text);
+        
+        if (partialData && partialData.monthlyThemes.length > 0) {
+          console.log(`Extracted ${partialData.monthlyThemes.length} themes and ${partialData.taskPatterns.length} task patterns`);
+          
+          // Build title and description from themes
+          const firstTheme = partialData.monthlyThemes[0]?.theme || "Learning Journey";
+          aiPlan = {
+            title: `Master ${goalInput.categoryName || "Your Goal"}`,
+            description: `A structured learning path starting with ${firstTheme}`,
+            monthlyThemes: partialData.monthlyThemes,
+            taskPatterns: partialData.taskPatterns.length > 0 
+              ? partialData.taskPatterns 
+              : partialData.monthlyThemes.map(theme => ({
+                  month: theme.month,
+                  tasks: theme.topics.slice(0, 5).map((topic, i) => ({
+                    title: `Learn ${topic}`,
+                    description: `Study and practice ${topic} as part of ${theme.theme}`,
+                    type: i % 3 === 0 ? "learn" : i % 3 === 1 ? "practice" : "build",
+                    topic: topic
+                  }))
+                }))
+          };
+          console.log("Successfully recovered plan from partial data!");
+        } else {
+          // Return error - let the user know AI generation failed
+          return NextResponse.json({ 
+            success: false, 
+            error: "AI failed to generate a valid plan. Please try again.",
+            details: "The AI response could not be parsed correctly."
+          }, { status: 500 });
+        }
+      }
     }
 
     // Now expand task patterns to ALL dates
@@ -1724,7 +1896,7 @@ export async function POST(request: NextRequest) {
       const patternTasks = monthPattern?.tasks || [];
       
       // Ensure we have enough unique tasks - generate more if needed
-      const expandedTasks: { title: string; description: string; type: string; topic: string }[] = [];
+      const expandedTasks: TaskPattern[] = [];
       
       for (let i = 0; i < monthDates.length; i++) {
         expandedTasks.push(createTaskFromPattern(patternTasks, i, month, monthTheme));
@@ -1743,6 +1915,48 @@ export async function POST(request: NextRequest) {
           basePoints = 20;
         }
         
+        // Use AI-generated resources if available, otherwise generate fallback resources
+        const categoryName = goalInput.categoryName || goalInput.category || "Programming";
+        let resources: TaskResource[];
+        
+        if (task.resources && task.resources.length > 0) {
+          // Convert AI resources to TaskResource format
+          resources = task.resources.map(r => {
+            let source = "Web";
+            try {
+              source = new URL(r.url).hostname.replace("www.", "");
+            } catch {
+              // Invalid URL, use default source
+            }
+            return {
+              type: (r.type || "article") as TaskResource["type"],
+              title: r.name || "Resource",
+              url: r.url,
+              source,
+              difficulty: (goalInput.experienceLevel as DifficultyLevel) ?? "beginner",
+              isFree: true,
+            };
+          }).filter(r => r.url?.startsWith("http")).slice(0, 3);
+          
+          // If no valid AI resources, use fallback
+          if (resources.length === 0) {
+            resources = generateTaskResources(
+              task.title,
+              task.type || "learn",
+              categoryName,
+              goalInput.experienceLevel || "beginner"
+            );
+          }
+        } else {
+          // Fallback to generated resources
+          resources = generateTaskResources(
+            task.title,
+            task.type || "learn",
+            categoryName,
+            goalInput.experienceLevel || "beginner"
+          );
+        }
+        
         dailyTasks.push({
           taskId: `task-${planId}-${globalDayCounter}`,
           day: globalDayCounter,
@@ -1754,6 +1968,7 @@ export async function POST(request: NextRequest) {
           points: basePoints,
           month: month,
           week: weekInMonth,
+          resources: resources,
         });
         
         // Add LeetCode task if enabled (as second task for the day)
@@ -1824,6 +2039,7 @@ export async function POST(request: NextRequest) {
       scheduleType,
       timeCommitment: goalInput.timeCommitment,
       includeLeetCode: includeLeetCode || false,
+      leetCodeLanguage: leetCodeLanguage || "python",
       totalDays,
       dailyTasks, // All 260/365 unique tasks!
       monthlyThemes,

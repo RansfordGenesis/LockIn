@@ -1,26 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkEmailExists, saveUser, getUserByEmail } from "@/lib/dynamodb";
+import {
+  checkEmailExists,
+  saveUserV2,
+  getUserByEmailV2,
+  isUserDocumentV2,
+  CURRENT_SCHEMA_VERSION,
+} from "@/lib/dynamodb";
 import { formatPhone, validateEmail, validatePhone } from "@/lib/validation";
-import type { UserDocument, DailyTask } from "@/lib/dynamodb";
+import type {
+  UserDocumentV2,
+  PlanDocument,
+  DEFAULT_USER_SETTINGS,
+} from "@/types/multiplan";
 
-// POST - Create a new user with their complete plan
+// POST - Create a new user with their first plan (V2 schema)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      email, 
-      phoneNumber, 
+    const {
+      email,
+      phoneNumber,
       name,
       // Plan data from generate-enhanced-plan
       planId,
       planTitle,
       planDescription,
       planCategory,
+      planIcon,
       planStartDate,
       planEndDate,
       scheduleType,
       timeCommitment,
       includeLeetCode,
+      leetCodeLanguage,
       totalDays,
       dailyTasks,
       monthlyThemes,
@@ -59,52 +71,107 @@ export async function POST(request: NextRequest) {
     const exists = await checkEmailExists(normalizedEmail);
     if (exists) {
       return NextResponse.json(
-        { success: false, error: "An account with this email already exists. Please log in instead." },
+        {
+          success: false,
+          error: "An account with this email already exists. Please log in instead.",
+        },
         { status: 409 }
       );
     }
 
-    // Create complete user document with plan data
-    const userDocument: UserDocument = {
-      email: normalizedEmail,
-      name: name || "",
-      phoneNumber: normalizedPhone,
-      createdAt: new Date().toISOString(),
-      // Plan info
+    const now = new Date().toISOString();
+    const startDate = planStartDate || now.split("T")[0];
+    const endDate =
+      planEndDate ||
+      new Date(Date.now() + (totalDays || 365) * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+    // Create the first plan document
+    const firstPlan: PlanDocument = {
+      planId: planId || `plan_${Date.now()}`,
+      planTitle: planTitle || "My Learning Plan",
+      planDescription: planDescription || "",
+      planCategory: planCategory || "custom",
+      planIcon: planIcon || "✨",
+      startDate,
+      endDate,
+      totalDays: totalDays || 365,
       scheduleType: scheduleType || "weekdays",
       timeCommitment: timeCommitment || "1hr-daily",
+      experienceLevel: "intermediate",
       includeLeetCode: includeLeetCode || false,
-      planId: planId || "",
-      planTitle: planTitle || "",
-      planDescription: planDescription || "",
-      planCategory: planCategory || "",
-      planStartDate: planStartDate || new Date().toISOString().split('T')[0],
-      planEndDate: planEndDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      totalDays: totalDays || 260,
-      // All daily tasks (260 or 365 unique tasks)
-      dailyTasks: (dailyTasks || []) as DailyTask[],
+      leetCodeLanguage: leetCodeLanguage,
+      dailyTasks: dailyTasks || [],
       monthlyThemes: monthlyThemes || [],
-      // Progress tracking (starts empty)
       completedTasks: {},
       totalPoints: 0,
+      earnedPoints: 0,
       currentStreak: 0,
       longestStreak: 0,
       lastCheckIn: null,
       dailyCheckIns: {},
+      quizAttempts: [],
+      leetCodeSubmissions: [],
+      createdAt: now,
+      updatedAt: now,
     };
 
-    // Save to DynamoDB (email is the primary key)
-    await saveUser(userDocument);
+    // Create V2 user document with the plan
+    const userDocument: UserDocumentV2 = {
+      email: normalizedEmail,
+      name: name || "",
+      phoneNumber: normalizedPhone,
+      createdAt: now,
+      updatedAt: now,
+      settings: {
+        reminderTime: "09:00",
+        timezone: "Africa/Accra",
+        emailNotifications: true,
+        smsNotifications: true,
+        theme: "dark",
+      },
+      plans: [firstPlan],
+      activePlanId: firstPlan.planId,
+      globalTotalPoints: 0,
+      globalCurrentStreak: 0,
+      globalLongestStreak: 0,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+    };
+
+    // Save to DynamoDB
+    await saveUserV2(userDocument);
 
     return NextResponse.json({
       success: true,
       user: {
         email: userDocument.email,
         name: userDocument.name,
-        planTitle: userDocument.planTitle,
-        totalDays: userDocument.totalDays,
-        totalTasks: userDocument.dailyTasks.length,
+        planTitle: firstPlan.planTitle,
+        totalDays: firstPlan.totalDays,
+        totalTasks: firstPlan.dailyTasks.length,
       },
+      plans: [
+        {
+          planId: firstPlan.planId,
+          planTitle: firstPlan.planTitle,
+          planDescription: firstPlan.planDescription,
+          planCategory: firstPlan.planCategory,
+          planIcon: firstPlan.planIcon,
+          totalDays: firstPlan.totalDays,
+          totalTasks: firstPlan.dailyTasks.length,
+          completedTasksCount: 0,
+          totalPoints: 0,
+          earnedPoints: 0,
+          currentStreak: 0,
+          startDate: firstPlan.startDate,
+          endDate: firstPlan.endDate,
+          isActive: true,
+          createdAt: firstPlan.createdAt,
+          progressPercent: 0,
+        },
+      ],
+      activePlanId: firstPlan.planId,
     });
   } catch (error) {
     console.error("Error creating user:", error);
@@ -128,7 +195,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await getUserByEmail(email.toLowerCase().trim());
+    const user = await getUserByEmailV2(email.toLowerCase().trim());
 
     if (!user) {
       return NextResponse.json(
@@ -137,6 +204,54 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Handle V2 schema
+    if (isUserDocumentV2(user)) {
+      const activePlan = user.plans.find((p) => p.planId === user.activePlanId);
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          email: user.email,
+          name: user.name,
+          phoneNumber: user.phoneNumber,
+          createdAt: user.createdAt,
+          planTitle: activePlan?.planTitle || "",
+          planCategory: activePlan?.planCategory || "",
+          totalDays: activePlan?.totalDays || 0,
+          totalTasks: activePlan?.dailyTasks?.length || 0,
+          totalPoints: user.globalTotalPoints,
+          currentStreak: user.globalCurrentStreak,
+          longestStreak: user.globalLongestStreak,
+        },
+        plans: user.plans.map((plan) => ({
+          planId: plan.planId,
+          planTitle: plan.planTitle,
+          planDescription: plan.planDescription,
+          planCategory: plan.planCategory,
+          planIcon: plan.planIcon,
+          totalDays: plan.totalDays,
+          totalTasks: plan.dailyTasks?.length || 0,
+          completedTasksCount: Object.keys(plan.completedTasks || {}).length,
+          totalPoints: plan.totalPoints,
+          earnedPoints: plan.earnedPoints || 0,
+          currentStreak: plan.currentStreak || 0,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          isActive: plan.planId === user.activePlanId,
+          createdAt: plan.createdAt,
+          progressPercent: plan.dailyTasks?.length
+            ? Math.round(
+                (Object.keys(plan.completedTasks || {}).length /
+                  plan.dailyTasks.length) *
+                  100
+              )
+            : 0,
+        })),
+        activePlanId: user.activePlanId,
+      });
+    }
+
+    // Handle V1 schema (backward compatibility)
     return NextResponse.json({
       success: true,
       user: {

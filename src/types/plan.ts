@@ -1,3 +1,6 @@
+// Re-export multi-plan types for convenience
+export * from "./multiplan";
+
 // ==========================================
 // USER & AUTHENTICATION
 // ==========================================
@@ -42,6 +45,9 @@ export interface GoalInput {
   customGoal?: string;
   scheduleType: "weekdays" | "fullweek";
   customCurriculum?: string; // User's own pasted curriculum
+  // Custom timeline support
+  startDate?: string;
+  totalDays?: number;
 }
 
 // Legacy support
@@ -63,10 +69,12 @@ export interface Plan {
   title: string;
   description: string;
   category: string;
+  planIcon?: string; // Emoji icon for the plan
   createdAt: string;
   startDate: string;
   endDate: string;
   scheduleType: "weekdays" | "fullweek";
+  totalDays?: number; // Custom timeline support
   quarters: Quarter[];
   milestones: Milestone[];
   totalTasks: number;
@@ -173,10 +181,14 @@ export interface LeetCodeSubmission {
 }
 
 export interface Resource {
-  type: "video" | "article" | "exercise" | "project" | "documentation";
+  type: "video" | "article" | "exercise" | "project" | "documentation" | "course" | "tutorial" | "book" | "podcast" | "tool";
   title: string;
   url?: string;
   description?: string;
+  source?: string; // e.g., "YouTube", "MDN", "Coursera"
+  estimatedMinutes?: number;
+  difficulty?: "beginner" | "intermediate" | "advanced";
+  isFree?: boolean;
 }
 
 export interface Milestone {
