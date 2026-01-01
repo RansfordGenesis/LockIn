@@ -368,7 +368,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {PLAN_CATEGORIES.map((category) => (
           <button
             key={category.id}
@@ -385,10 +385,10 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
             }`}
           >
             <div className="flex items-start gap-3">
-              <span className="text-2xl">{category.icon}</span>
+              <span className="text-2xl flex-shrink-0">{category.icon}</span>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-white truncate">{category.name}</p>
-                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{category.description}</p>
+                <p className="font-medium text-white text-sm sm:text-base">{category.name}</p>
+                <p className="text-xs text-gray-400 mt-1">{category.description}</p>
               </div>
               {data.selectedCategory === category.id && (
                 <div className="w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">

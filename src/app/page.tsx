@@ -581,7 +581,7 @@ export default function Home() {
       <main className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header with Dropdown - Only show when authenticated */}
         {isAuthenticated && currentView === "daily" && !showDashboard && !showCurriculum && (
-          <header className="md:hidden p-4 border-b border-white/10">
+          <header className="md:hidden sticky top-0 z-[60] p-4 border-b border-white/10 bg-[#0a0a0c]/95 backdrop-blur-xl">
             <PlanDropdown
               plans={plans}
               activePlan={activePlanSummary}

@@ -158,11 +158,12 @@ export default function DailyFocusView({
   return (
     <div className="min-h-screen bg-[#0a0a0c]">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#0a0a0c]/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-[#0a0a0c]/80 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-4xl mx-auto px-4 py-3 md:py-4">
+          {/* Mobile: Stack layout, Desktop: Flex row */}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Date Navigation */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-2 md:gap-4">
               <button
                 onClick={() => navigateDate("prev")}
                 className="p-2 rounded-lg hover:bg-white/10 transition-colors"
@@ -172,11 +173,11 @@ export default function DailyFocusView({
                 </svg>
               </button>
               
-              <div className="text-center">
-                <h1 className="text-xl font-bold text-white">
+              <div className="text-center min-w-[120px]">
+                <h1 className="text-lg md:text-xl font-bold text-white">
                   {isCurrentDay ? "Today" : format(date, "EEEE")}
                 </h1>
-                <p className="text-sm text-gray-400">{format(date, "MMMM d, yyyy")}</p>
+                <p className="text-xs md:text-sm text-gray-400">{format(date, "MMMM d, yyyy")}</p>
               </div>
               
               <button
@@ -189,26 +190,27 @@ export default function DailyFocusView({
               </button>
             </div>
 
-            {/* View Switchers */}
-            <div className="flex items-center gap-2">
+            {/* View Switchers - Scrollable on mobile */}
+            <div className="flex items-center justify-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide pb-1 md:pb-0">
               <button
                 onClick={() => onViewChange("curriculum")}
-                className="px-3 py-1.5 text-sm bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-teal-400 hover:from-teal-500/30 hover:to-emerald-500/30 rounded-lg transition-colors border border-teal-500/30"
+                className="flex-shrink-0 px-2 md:px-3 py-1.5 text-xs md:text-sm bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-teal-400 hover:from-teal-500/30 hover:to-emerald-500/30 rounded-lg transition-colors border border-teal-500/30"
               >
                 📚 Full Plan
               </button>
-              {(["weekly", "monthly", "quarterly"] as const).map((view) => (
+              {(["weekly", "monthly"] as const).map((view) => (
                 <button
                   key={view}
                   onClick={() => onViewChange(view)}
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors capitalize"
+                  className="flex-shrink-0 px-2 md:px-3 py-1.5 text-xs md:text-sm text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors capitalize"
                 >
                   {view}
                 </button>
               ))}
+              {/* Hide logout on mobile since it's in the dropdown */}
               <button
                 onClick={onLogout}
-                className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
+                className="hidden md:block flex-shrink-0 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
               >
                 Logout
               </button>
@@ -217,21 +219,21 @@ export default function DailyFocusView({
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-4 md:py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6 md:mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-br from-teal-500/20 to-emerald-500/20 rounded-2xl p-4 border border-teal-500/20"
+            className="bg-gradient-to-br from-teal-500/20 to-emerald-500/20 rounded-xl md:rounded-2xl p-2 md:p-4 border border-teal-500/20"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-teal-500/30 flex items-center justify-center">
-                <span className="text-xl">🔥</span>
+            <div className="flex flex-col md:flex-row items-center gap-1 md:gap-3 text-center md:text-left">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-teal-500/30 flex items-center justify-center">
+                <span className="text-lg md:text-xl">🔥</span>
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">{currentStreak}</p>
-                <p className="text-xs text-teal-400">Day Streak</p>
+                <p className="text-xl md:text-2xl font-bold text-white">{currentStreak}</p>
+                <p className="text-[10px] md:text-xs text-teal-400">Day Streak</p>
               </div>
             </div>
           </motion.div>
@@ -240,15 +242,15 @@ export default function DailyFocusView({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-2xl p-4 border border-purple-500/20"
+            className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl md:rounded-2xl p-2 md:p-4 border border-purple-500/20"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center">
-                <span className="text-xl">⭐</span>
+            <div className="flex flex-col md:flex-row items-center gap-1 md:gap-3 text-center md:text-left">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-purple-500/30 flex items-center justify-center">
+                <span className="text-lg md:text-xl">⭐</span>
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">{totalPoints}</p>
-                <p className="text-xs text-purple-400">Total Points</p>
+                <p className="text-xl md:text-2xl font-bold text-white">{totalPoints}</p>
+                <p className="text-[10px] md:text-xs text-purple-400">Total Points</p>
               </div>
             </div>
           </motion.div>
@@ -257,22 +259,22 @@ export default function DailyFocusView({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl p-4 border border-blue-500/20"
+            className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-xl md:rounded-2xl p-2 md:p-4 border border-blue-500/20"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-500/30 flex items-center justify-center">
-                <span className="text-xl">✨</span>
+            <div className="flex flex-col md:flex-row items-center gap-1 md:gap-3 text-center md:text-left">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-500/30 flex items-center justify-center">
+                <span className="text-lg md:text-xl">✨</span>
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">+{pointsToday}</p>
-                <p className="text-xs text-blue-400">Today</p>
+                <p className="text-xl md:text-2xl font-bold text-white">+{pointsToday}</p>
+                <p className="text-[10px] md:text-xs text-blue-400">Today</p>
               </div>
             </div>
           </motion.div>
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-8">
+        <div className="mb-6 md:mb-8">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-400">Today&apos;s Progress</span>
             <span className="text-sm font-medium text-white">
