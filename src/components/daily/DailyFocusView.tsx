@@ -636,6 +636,7 @@ export default function DailyFocusView({
         <LeetCodeModal
           task={leetCodeTask}
           language={leetCodeLanguage}
+          currentDate={currentDate}
           onComplete={handleLeetCodeComplete}
           onClose={() => setLeetCodeTask(null)}
         />

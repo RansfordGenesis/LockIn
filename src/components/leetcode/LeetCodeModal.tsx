@@ -31,6 +31,7 @@ const getScoreColor = (score: number): string => {
 interface LeetCodeModalProps {
   task: Task;
   language: string;
+  currentDate: string; // The date being viewed (YYYY-MM-DD)
   onComplete: (passed: boolean, points: number, details: LeetCodeCompletionDetails) => void;
   onClose: () => void;
 }
@@ -64,6 +65,7 @@ const COMPLEXITY_OPTIONS = [
 export default function LeetCodeModal({
   task,
   language,
+  currentDate,
   onComplete,
   onClose,
 }: Readonly<LeetCodeModalProps>) {
@@ -94,12 +96,21 @@ export default function LeetCodeModal({
     pointsEarned: number;
   } | null>(null);
 
-  // Fetch problem details on mount - always get today's daily challenge
+  // Fetch problem details on mount - handles today, past, and future dates
   useEffect(() => {
     const fetchProblem = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const viewingDate = currentDate;
+      
+      // Check if viewing a future date
+      if (viewingDate > today) {
+        setError("future-date");
+        return;
+      }
+      
       try {
-        // First, fetch today's actual daily challenge from LeetCode
-        const dailyResponse = await fetch("/api/leetcode-daily");
+        // Fetch the daily challenge for the specific date being viewed
+        const dailyResponse = await fetch(`/api/leetcode-daily?date=${viewingDate}`);
         const dailyData = await dailyResponse.json();
 
         if (dailyData.success && dailyData.problem) {
@@ -118,7 +129,7 @@ export default function LeetCodeModal({
     };
 
     fetchProblem();
-  }, [language]);
+  }, [language, currentDate]);
 
   // Legacy: Extract problem slug from task description (kept for backwards compatibility)
   const extractProblemSlug = (): string | null => {
@@ -243,7 +254,7 @@ export default function LeetCodeModal({
           </div>
         </div>
         <a
-          href={`https://leetcode.com/problems/${problem?.titleSlug}/description/?envType=daily-question&envId=${new Date().toISOString().split('T')[0]}`}
+          href={`https://leetcode.com/problems/${problem?.titleSlug}/description/?envType=daily-question&envId=${currentDate}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-3 py-2 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
@@ -674,32 +685,42 @@ export default function LeetCodeModal({
           {error && step === "loading" && (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500/20 to-yellow-500/20 flex items-center justify-center mb-4">
-                <span className="text-4xl">🐱</span>
+                <span className="text-4xl">
+                  {error === "future-date" ? "🔮" : "🐱"}
+                </span>
               </div>
               <h3 className="text-lg font-semibold text-white mb-2">
-                {error === "connection-failed" ? "Connection hiccup!" : "Couldn't fetch today's challenge"}
+                {error === "future-date" 
+                  ? "Not so fast, time traveler!" 
+                  : error === "connection-failed" 
+                    ? "Connection hiccup!" 
+                    : "Couldn't fetch today's challenge"}
               </h3>
               <p className="text-gray-400 text-center max-w-sm mb-4">
-                {error === "connection-failed" 
-                  ? "Our code cat couldn't reach LeetCode. Check your connection and try again!"
-                  : "The daily challenge is being shy today. Try again or visit LeetCode directly!"}
+                {error === "future-date"
+                  ? "You can't solve future challenges yet. Come back on that day to tackle it!"
+                  : error === "connection-failed" 
+                    ? "Our code cat couldn't reach LeetCode. Check your connection and try again!"
+                    : "The daily challenge is being shy today. Try again or visit LeetCode directly!"}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
                   className="px-5 py-2.5 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors"
                 >
-                  Close
+                  {error === "future-date" ? "Got it!" : "Close"}
                 </button>
-                <a
-                  href="https://leetcode.com/problemset/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-medium rounded-xl hover:from-orange-400 hover:to-yellow-400 transition-all flex items-center gap-2"
-                >
-                  Open LeetCode
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                {error !== "future-date" && (
+                  <a
+                    href="https://leetcode.com/problemset/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-medium rounded-xl hover:from-orange-400 hover:to-yellow-400 transition-all flex items-center gap-2"
+                  >
+                    Open LeetCode
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
               </div>
             </div>
           )}

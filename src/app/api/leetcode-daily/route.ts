@@ -1,20 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { fetchLeetCodeDaily, fetchProblemDetails, parseProblemContent } from "@/lib/leetcode";
 
 /**
- * GET /api/leetcode-daily
- * Fetches today's LeetCode Daily Challenge with full problem details
+ * GET /api/leetcode-daily?date=YYYY-MM-DD
+ * Fetches LeetCode Daily Challenge for a specific date (or today if not specified)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Step 1: Fetch today's daily challenge metadata
-    const dailyChallenge = await fetchLeetCodeDaily();
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get("date"); // Optional: YYYY-MM-DD format
+    
+    // Step 1: Fetch the daily challenge metadata for the specified date
+    const dailyChallenge = await fetchLeetCodeDaily(date || undefined);
 
     if (!dailyChallenge) {
       return NextResponse.json(
         {
           success: false,
-          error: "Could not fetch today's daily challenge. LeetCode may be unavailable."
+          error: date 
+            ? `Could not fetch the daily challenge for ${date}. It may not be available yet.`
+            : "Could not fetch today's daily challenge. LeetCode may be unavailable."
         },
         { status: 503 }
       );

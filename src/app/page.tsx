@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { PlanSummary } from "@/types/multiplan";
 import AuthScreen from "@/components/auth/AuthScreen";
 import AIFirstWizard from "@/components/wizard/AIFirstWizard";
 import DailyFocusView from "@/components/daily/DailyFocusView";
@@ -57,22 +58,64 @@ export default function Home() {
     isCreatingPlan,
     setIsCreatingPlan,
     setGlobalStats,
+    // App initialization
+    initializeApp,
+    isLoading,
+    isInitialized,
+    saveSession,
   } = useAppStore();
 
-  // Auto-redirect to daily view if user has a plan and is on landing page
-  // This handles the case where currentView wasn't persisted in older versions
+  // Initialize app on mount - fetch session from server
   React.useEffect(() => {
-    if (currentView === "landing" && plan && user) {
-      setCurrentView("daily");
-    }
-  }, [currentView, plan, user, setCurrentView]);
+    initializeApp();
+  }, [initializeApp]);
 
   // Auto-redirect to wizard if user is authenticated but has no plan
   React.useEffect(() => {
-    if (user && !plan && plans.length === 0 && currentView === "daily") {
+    if (isInitialized && user && !plan && plans.length === 0 && currentView === "daily") {
       setCurrentView("wizard");
     }
-  }, [user, plan, plans.length, currentView, setCurrentView]);
+  }, [isInitialized, user, plan, plans.length, currentView, setCurrentView]);
+
+  // Sync data from server when app becomes visible (handles multi-device sync)
+  React.useEffect(() => {
+    if (!user?.email || !activePlanId) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible") {
+        try {
+          // Fetch latest state from server
+          const response = await fetch(`/api/user-state?email=${user.email}&planId=${activePlanId}`);
+          const data = await response.json();
+          
+          if (data.success && data.state) {
+            // Only update if there are differences (more completed tasks on server)
+            const serverCompletedCount = Object.keys(data.state.completedTasks || {}).length;
+            const localCompletedCount = Object.keys(completedTasks).length;
+            
+            if (serverCompletedCount > localCompletedCount) {
+              restoreUserState(data.state);
+              // Also refresh plans to update progress
+              const loginResponse = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: user.email, phone: user.phoneNumber }),
+              });
+              const loginData = await loginResponse.json();
+              if (loginData.success && loginData.plans) {
+                setPlans(loginData.plans);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Failed to sync data:", error);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [user, activePlanId, completedTasks, restoreUserState, setPlans]);
 
   // Helper type for new plan format
   interface NewPlanFormat {
@@ -154,7 +197,7 @@ export default function Home() {
 
   // Get active plan summary
   const activePlanSummary = useMemo(() => {
-    return plans.find(p => p.planId === activePlanId) || null;
+    return plans.find((p: PlanSummary) => p.planId === activePlanId) || null;
   }, [plans, activePlanId]);
 
   // Define wizard data interface matching AIFirstWizard output
@@ -196,6 +239,9 @@ export default function Home() {
 
   // Handle auth success - either go to wizard (new user) or daily view (existing user with plan)
   const handleAuthSuccess = async (authData: { email: string; name: string; phone: string; isNewUser: boolean }) => {
+    // Save session for page refresh support
+    saveSession(authData.email, authData.phone);
+    
     if (authData.isNewUser) {
       // New user - save auth info and go to wizard
       setAuthUser(authData);
@@ -608,6 +654,18 @@ export default function Home() {
   // Check if user is authenticated with plans
   const isAuthenticated = user && plans.length > 0 && plan;
 
+  // Show loading screen while initializing
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading your journey...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Main render
   return (
     <div className="flex min-h-screen bg-[#0a0a0c]">
@@ -677,7 +735,7 @@ export default function Home() {
                   <AIFirstWizard
                     onComplete={handleWizardComplete}
                     onCancel={plans.length > 0 ? () => setCurrentView("daily") : undefined}
-                    authUser={authUser || { email: user!.email, name: user!.name || "", phone: user!.phoneNumber, isNewUser: false }}
+                    authUser={authUser || { email: user!.email, name: user!.name || "", phone: user!.phoneNumber }}
                   />
                 )}
               </motion.div>

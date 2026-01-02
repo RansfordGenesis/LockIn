@@ -1544,78 +1544,12 @@ const parseAIResponse = (bedrockResponse: { content: string }) => {
   return text.trim();
 };
 
-// Helper: Try to repair truncated JSON - handles mid-property truncation
-const repairTruncatedJSON = (text: string): string => {
-  // First, find the last valid position where JSON could be closed
-  // Look for the last complete object/array pattern
-  
-  // Remove any incomplete string at the end (truncated mid-string)
-  // Find the last complete property by looking for patterns
-  
-  // Strategy: Work backwards to find a safe truncation point
-  let safeText = text;
-  
-  // Step 1: If ends with incomplete escape sequence, remove it
-  safeText = safeText.replace(/\\+$/, '');
-  
-  // Step 2: Find last complete key-value pair or array element
-  // Look for last occurrence of complete patterns: "key": "value" or "key": number or "key": [...] or "key": {...}
-  
-  // Check if we're in the middle of a string value
-  let quoteCount = 0;
-  for (const char of safeText) {
-    if (char === '"') {
-      // Check if previous char was escape
-      const idx = safeText.indexOf(char);
-      if (idx === 0 || safeText[idx - 1] !== '\\') {
-        quoteCount++;
-      }
-    }
-  }
-  
-  // If odd number of quotes, we're in a string - find and close it
-  if (quoteCount % 2 !== 0) {
-    // Find last quote and check what comes after
-    const lastQuoteIdx = safeText.lastIndexOf('"');
-    const afterQuote = safeText.slice(lastQuoteIdx + 1);
-    
-    // If after quote looks like it should continue (has :, or incomplete value)
-    if (afterQuote.includes(':') && !afterQuote.includes('"')) {
-      // Truncated in the middle of a value string - remove back to last complete property
-      const lastCompleteComma = safeText.lastIndexOf('",');
-      const lastCompleteBrace = safeText.lastIndexOf('"}');
-      const lastCompleteBracket = safeText.lastIndexOf('"]');
-      const lastCompleteNumber = safeText.search(/[0-9]\s*[,}\]]\s*$/);
-      
-      const cutPoint = Math.max(lastCompleteComma + 2, lastCompleteBrace + 2, lastCompleteBracket + 2, lastCompleteNumber + 1);
-      if (cutPoint > 10) {
-        safeText = safeText.slice(0, cutPoint);
-      }
-    } else {
-      // Just close the string
-      safeText += '"';
-    }
-  }
-  
-  // Step 3: Remove trailing incomplete property (key without value)
-  // Pattern: , "key" or { "key" at the end without :
-  safeText = safeText.replace(/,\s*"[^"]*"\s*$/, '');
-  safeText = safeText.replace(/{\s*"[^"]*"\s*$/, '{');
-  
-  // Step 4: Remove trailing colon (property key exists but value doesn't)
-  safeText = safeText.replace(/:\s*$/, ': ""');
-  
-  // Step 5: Remove incomplete array/object starts
-  safeText = safeText.replace(/:\s*\[\s*$/, ': []');
-  safeText = safeText.replace(/:\s*{\s*$/, ': {}');
-  
-  // Step 6: Count and close brackets/braces
-  let openBraces = 0;
-  let openBrackets = 0;
-  let inString = false;
+// Helper: Count unescaped quotes in a string
+const countUnescapedQuotes = (text: string): number => {
+  let count = 0;
   let escaped = false;
   
-  for (const char of safeText) {
+  for (const char of text) {
     if (escaped) {
       escaped = false;
       continue;
@@ -1624,33 +1558,117 @@ const repairTruncatedJSON = (text: string): string => {
       escaped = true;
       continue;
     }
-    if (char === '"' && !escaped) {
+    if (char === '"') {
+      count++;
+    }
+  }
+  return count;
+};
+
+// Helper: Find safe truncation point when in middle of string value
+const findSafeTruncationPoint = (text: string): string => {
+  const afterQuoteChars = new Set([':', ',', '}', ']', ' ', '\n', '\t']);
+  const lastQuoteIdx = text.lastIndexOf('"');
+  const afterQuote = text.slice(lastQuoteIdx + 1);
+  
+  // If after quote has : but no closing quote, we're in middle of a value
+  const hasColon = afterQuote.includes(':');
+  const hasQuote = afterQuote.includes('"');
+  
+  if (hasColon && !hasQuote) {
+    // Find last complete property
+    const lastCompleteComma = text.lastIndexOf('",');
+    const lastCompleteBrace = text.lastIndexOf('"}');
+    const lastCompleteBracket = text.lastIndexOf('"]');
+    const numberEndPattern = /\d\s*[,}\]]\s*$/;
+    const lastCompleteNumber = text.search(numberEndPattern);
+    
+    const cutPoint = Math.max(
+      lastCompleteComma + 2, 
+      lastCompleteBrace + 2, 
+      lastCompleteBracket + 2, 
+      lastCompleteNumber + 1
+    );
+    
+    if (cutPoint > 10) {
+      return text.slice(0, cutPoint);
+    }
+  }
+  
+  // Just close the string
+  return text + '"';
+};
+
+// Helper: Count open brackets and braces
+const countOpenBracketsAndBraces = (text: string): { openBraces: number; openBrackets: number } => {
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+  
+  for (const char of text) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
       inString = !inString;
       continue;
     }
     if (!inString) {
       if (char === '{') openBraces++;
-      if (char === '}') openBraces--;
-      if (char === '[') openBrackets++;
-      if (char === ']') openBrackets--;
+      else if (char === '}') openBraces--;
+      else if (char === '[') openBrackets++;
+      else if (char === ']') openBrackets--;
     }
   }
   
-  // Step 7: Remove trailing commas before we close
-  safeText = safeText.replace(/,\s*$/, '');
-  
-  // Step 8: Close any unclosed brackets/braces
-  while (openBrackets > 0) {
-    safeText += ']';
-    openBrackets--;
+  return { openBraces, openBrackets };
+};
+
+// Helper: Close unclosed brackets and braces
+const closeUnclosedBrackets = (text: string, openBrackets: number, openBraces: number): string => {
+  let result = text;
+  for (let i = 0; i < openBrackets; i++) {
+    result += ']';
   }
-  while (openBraces > 0) {
-    safeText += '}';
-    openBraces--;
+  for (let i = 0; i < openBraces; i++) {
+    result += '}';
+  }
+  return result;
+};
+
+// Helper: Try to repair truncated JSON - handles mid-property truncation
+const repairTruncatedJSON = (text: string): string => {
+  let safeText = text;
+  
+  // Step 1: Remove incomplete escape sequence at end
+  safeText = safeText.replace(/\\+$/, '');
+  
+  // Step 2: Check if we're in the middle of a string (odd number of quotes)
+  const quoteCount = countUnescapedQuotes(safeText);
+  if (quoteCount % 2 !== 0) {
+    safeText = findSafeTruncationPoint(safeText);
   }
   
-  // Step 9: Final cleanup - remove trailing commas before closing brackets
-  safeText = safeText.replace(/,(\s*[\]}])/g, '$1');
+  // Step 3: Clean up incomplete patterns
+  safeText = safeText.replace(/,\s*"[^"]*"\s*$/, ''); // Trailing incomplete property
+  safeText = safeText.replace(/{\s*"[^"]*"\s*$/, '{'); // Object with key but no value
+  safeText = safeText.replace(/:\s*$/, ': ""'); // Colon without value
+  safeText = safeText.replace(/:\s*\[\s*$/, ': []'); // Incomplete array
+  safeText = safeText.replace(/:\s*{\s*$/, ': {}'); // Incomplete object
+  
+  // Step 4: Count and close brackets
+  const { openBraces, openBrackets } = countOpenBracketsAndBraces(safeText);
+  safeText = safeText.replace(/,\s*$/, ''); // Remove trailing comma
+  safeText = closeUnclosedBrackets(safeText, openBrackets, openBraces);
+  
+  // Step 5: Final cleanup - remove trailing commas before closing brackets
+  safeText = safeText.replaceAll(/,(\s*[\]}])/g, '$1');
   
   return safeText;
 };
@@ -1659,8 +1677,10 @@ const repairTruncatedJSON = (text: string): string => {
 const extractPartialPlan = (text: string): { monthlyThemes: MonthlyTheme[]; taskPatterns: { month: number; tasks: TaskPattern[] }[] } | null => {
   try {
     // Try to extract monthlyThemes array
-    const themesMatch = text.match(/"monthlyThemes"\s*:\s*\[([\s\S]*?)\](?=\s*,\s*"taskPatterns")/);
-    const patternsMatch = text.match(/"taskPatterns"\s*:\s*\[([\s\S]*)/);
+    const themesPattern = /"monthlyThemes"\s*:\s*\[([\s\S]*?)\](?=\s*,\s*"taskPatterns")/;
+    const patternsPattern = /"taskPatterns"\s*:\s*\[([\s\S]*)/;
+    const themesMatch = themesPattern.exec(text);
+    const patternsMatch = patternsPattern.exec(text);
     
     if (!themesMatch) return null;
     
@@ -1748,6 +1768,109 @@ const createTaskFromPattern = (
   };
 };
 
+// Type for AI parsed plan
+interface AIPlan {
+  title: string;
+  description: string;
+  monthlyThemes: MonthlyTheme[];
+  taskPatterns: { month: number; tasks: { title: string; description: string; type: string; topic: string }[] }[];
+}
+
+// Helper: Get task type from index for fallback task generation
+const getTaskTypeFromIndex = (i: number): "learn" | "practice" | "build" => {
+  if (i % 3 === 0) return "learn";
+  if (i % 3 === 1) return "practice";
+  return "build";
+};
+
+// Helper: Build fallback AI plan from partial data
+const buildFallbackPlan = (
+  partialData: { monthlyThemes: MonthlyTheme[]; taskPatterns: { month: number; tasks: TaskPattern[] }[] },
+  categoryName: string
+): AIPlan => {
+  const firstTheme = partialData.monthlyThemes[0]?.theme || "Learning Journey";
+  
+  const taskPatterns = partialData.taskPatterns.length > 0 
+    ? partialData.taskPatterns 
+    : partialData.monthlyThemes.map(theme => ({
+        month: theme.month,
+        tasks: theme.topics.slice(0, 5).map((topic, i) => ({
+          title: `Learn ${topic}`,
+          description: `Study and practice ${topic} as part of ${theme.theme}`,
+          type: getTaskTypeFromIndex(i),
+          topic: topic
+        }))
+      }));
+
+  return {
+    title: `Master ${categoryName || "Your Goal"}`,
+    description: `A structured learning path starting with ${firstTheme}`,
+    monthlyThemes: partialData.monthlyThemes,
+    taskPatterns
+  };
+};
+
+// Helper: Parse and validate AI response with fallbacks
+const parseAIPlan = (
+  text: string, 
+  categoryName: string
+): { success: true; plan: AIPlan } | { success: false; error: string } => {
+  // Try direct parse first
+  try {
+    const aiPlan = JSON.parse(text) as AIPlan;
+    if (aiPlan.monthlyThemes && aiPlan.taskPatterns && aiPlan.taskPatterns.length > 0) {
+      console.log(`AI generated plan with ${aiPlan.taskPatterns.length} month patterns`);
+      return { success: true, plan: aiPlan };
+    }
+    console.error("Invalid AI response structure");
+  } catch {
+    console.log("First parse failed, attempting to repair truncated JSON...");
+  }
+
+  // Try to repair truncated JSON
+  try {
+    const repairedText = repairTruncatedJSON(text);
+    const aiPlan = JSON.parse(repairedText) as AIPlan;
+    if (aiPlan.monthlyThemes && aiPlan.taskPatterns) {
+      console.log(`Repaired JSON successfully! Got ${aiPlan.taskPatterns?.length || 0} month patterns`);
+      return { success: true, plan: aiPlan };
+    }
+  } catch {
+    console.error("Repair also failed");
+  }
+
+  // Try to extract partial data as last resort
+  console.log("Attempting partial data extraction...");
+  const partialData = extractPartialPlan(text);
+  
+  if (partialData && partialData.monthlyThemes.length > 0) {
+    console.log(`Extracted ${partialData.monthlyThemes.length} themes and ${partialData.taskPatterns.length} task patterns`);
+    const fallbackPlan = buildFallbackPlan(partialData, categoryName);
+    console.log("Successfully recovered plan from partial data!");
+    return { success: true, plan: fallbackPlan };
+  }
+
+  return { success: false, error: "AI failed to generate a valid plan. Please try again." };
+};
+
+// Helper: Calculate base points from daily minutes
+const calculateBasePoints = (dailyMins: number): number => {
+  if (dailyMins >= 120) return 30;
+  if (dailyMins >= 60) return 20;
+  return 15;
+};
+
+// Helper: Get LeetCode difficulty for a month
+const getLeetCodeDifficulty = (month: number): { difficulty: string; minutes: number; points: number } => {
+  if (month > 8) {
+    return { difficulty: "hard", minutes: 45, points: 30 };
+  }
+  if (month > 3) {
+    return { difficulty: "medium", minutes: 30, points: 20 };
+  }
+  return { difficulty: "easy", minutes: 20, points: 10 };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -1802,77 +1925,22 @@ export async function POST(request: NextRequest) {
 
     // Call Bedrock
     const bedrockResponse = await generateWithBedrock(prompt);
-    let text = parseAIResponse(bedrockResponse);
+    const text = parseAIResponse(bedrockResponse);
 
-    let aiPlan: {
-      title: string;
-      description: string;
-      monthlyThemes: MonthlyTheme[];
-      taskPatterns: { month: number; tasks: { title: string; description: string; type: string; topic: string }[] }[];
-    };
-
-    try {
-      aiPlan = JSON.parse(text);
-      if (!aiPlan.monthlyThemes || !aiPlan.taskPatterns || aiPlan.taskPatterns.length === 0) {
-        console.error("Invalid AI response structure:", { 
-          hasMonthlyThemes: !!aiPlan.monthlyThemes, 
-          hasTaskPatterns: !!aiPlan.taskPatterns,
-          taskPatternsLength: aiPlan.taskPatterns?.length 
-        });
-        throw new Error("Invalid AI response structure");
-      }
-      console.log(`AI generated plan with ${aiPlan.taskPatterns.length} month patterns`);
-    } catch (parseError) {
-      // Try to repair truncated JSON
-      console.log("First parse failed, attempting to repair truncated JSON...");
-      try {
-        const repairedText = repairTruncatedJSON(text);
-        aiPlan = JSON.parse(repairedText);
-        if (!aiPlan.monthlyThemes || !aiPlan.taskPatterns) {
-          throw new Error("Repaired JSON still invalid");
-        }
-        console.log(`Repaired JSON successfully! Got ${aiPlan.taskPatterns?.length || 0} month patterns`);
-      } catch (repairError) {
-        console.error("Failed to parse AI response:", parseError);
-        console.error("Repair also failed:", repairError);
-        console.error("Raw AI response (first 500 chars):", text.substring(0, 500));
-        
-        // Try to extract partial data as last resort
-        console.log("Attempting partial data extraction...");
-        const partialData = extractPartialPlan(text);
-        
-        if (partialData && partialData.monthlyThemes.length > 0) {
-          console.log(`Extracted ${partialData.monthlyThemes.length} themes and ${partialData.taskPatterns.length} task patterns`);
-          
-          // Build title and description from themes
-          const firstTheme = partialData.monthlyThemes[0]?.theme || "Learning Journey";
-          aiPlan = {
-            title: `Master ${goalInput.categoryName || "Your Goal"}`,
-            description: `A structured learning path starting with ${firstTheme}`,
-            monthlyThemes: partialData.monthlyThemes,
-            taskPatterns: partialData.taskPatterns.length > 0 
-              ? partialData.taskPatterns 
-              : partialData.monthlyThemes.map(theme => ({
-                  month: theme.month,
-                  tasks: theme.topics.slice(0, 5).map((topic, i) => ({
-                    title: `Learn ${topic}`,
-                    description: `Study and practice ${topic} as part of ${theme.theme}`,
-                    type: i % 3 === 0 ? "learn" : i % 3 === 1 ? "practice" : "build",
-                    topic: topic
-                  }))
-                }))
-          };
-          console.log("Successfully recovered plan from partial data!");
-        } else {
-          // Return error - let the user know AI generation failed
-          return NextResponse.json({ 
-            success: false, 
-            error: "AI failed to generate a valid plan. Please try again.",
-            details: "The AI response could not be parsed correctly."
-          }, { status: 500 });
-        }
-      }
+    // Parse and validate the AI response
+    const categoryName = goalInput.categoryName || goalInput.category || "Programming";
+    const parseResult = parseAIPlan(text, categoryName);
+    
+    if (!parseResult.success) {
+      console.error("Raw AI response (first 500 chars):", text.substring(0, 500));
+      return NextResponse.json({ 
+        success: false, 
+        error: parseResult.error,
+        details: "The AI response could not be parsed correctly."
+      }, { status: 500 });
     }
+    
+    const aiPlan = parseResult.plan;
 
     // Now expand task patterns to ALL dates
     const planId = uuidv4();
@@ -1888,6 +1956,7 @@ export async function POST(request: NextRequest) {
 
     // For each month, assign tasks to dates
     let globalDayCounter = 0;
+    const basePoints = calculateBasePoints(dailyMins);
     
     for (let month = 1; month <= 12; month++) {
       const monthDates = datesByMonth.get(month) || [];
@@ -1908,15 +1977,7 @@ export async function POST(request: NextRequest) {
         const task = expandedTasks[index];
         const weekInMonth = Math.ceil((index + 1) / (scheduleType === "weekdays" ? 5 : 7));
         
-        let basePoints = 15;
-        if (dailyMins >= 120) {
-          basePoints = 30;
-        } else if (dailyMins >= 60) {
-          basePoints = 20;
-        }
-        
         // Use AI-generated resources if available, otherwise generate fallback resources
-        const categoryName = goalInput.categoryName || goalInput.category || "Programming";
         let resources: TaskResource[];
         
         if (task.resources && task.resources.length > 0) {
@@ -1973,37 +2034,19 @@ export async function POST(request: NextRequest) {
         
         // Add LeetCode task if enabled (as second task for the day)
         if (includeLeetCode) {
-          let difficulty = "easy";
-          if (month > 8) {
-            difficulty = "hard";
-          } else if (month > 3) {
-            difficulty = "medium";
-          }
-          let dsaMins = 20;
-          if (difficulty === "hard") {
-            dsaMins = 45;
-          } else if (difficulty === "medium") {
-            dsaMins = 30;
-          }
+          const lcConfig = getLeetCodeDifficulty(month);
           const languagePart = leetCodeLanguage ? ` in ${leetCodeLanguage}` : "";
-          // Description tells user to click the task to load the actual daily challenge
           const leetcodeDescription = `Complete LeetCode's Daily Challenge${languagePart}. Click this task to view the problem, submit your solution, and analyze time/space complexity. The actual problem will be fetched from LeetCode when you open this task.`;
-          let leetcodePoints = 10;
-          if (difficulty === "hard") {
-            leetcodePoints = 30;
-          } else if (difficulty === "medium") {
-            leetcodePoints = 20;
-          }
 
           dailyTasks.push({
             taskId: `task-${planId}-${globalDayCounter}-lc`,
             day: globalDayCounter,
             date: dateInfo.date,
-            title: `🧩 LeetCode Daily Challenge (${difficulty})`,
+            title: `🧩 LeetCode Daily Challenge (${lcConfig.difficulty})`,
             description: leetcodeDescription,
             type: "practice",
-            estimatedMinutes: dsaMins,
-            points: leetcodePoints,
+            estimatedMinutes: lcConfig.minutes,
+            points: lcConfig.points,
             month: month,
             week: weekInMonth,
           });

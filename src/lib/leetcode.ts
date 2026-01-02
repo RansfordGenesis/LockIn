@@ -47,10 +47,15 @@ export interface LeetCodeSubmissionResult {
 }
 
 /**
- * Fetch today's LeetCode daily challenge
+ * Fetch LeetCode daily challenge for a specific date
+ * @param date - Date in YYYY-MM-DD format (defaults to today)
  */
-export async function fetchLeetCodeDaily(): Promise<LeetCodeDailyChallenge | null> {
+export async function fetchLeetCodeDaily(date?: string): Promise<LeetCodeDailyChallenge | null> {
   try {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const [year, month] = targetDate.split('-').map(Number);
+    
+    // Fetch the month's daily challenges
     const response = await fetch(LEETCODE_GRAPHQL_API, {
       method: "POST",
       headers: {
@@ -58,26 +63,34 @@ export async function fetchLeetCodeDaily(): Promise<LeetCodeDailyChallenge | nul
       },
       body: JSON.stringify({
         query: `
-          query questionOfToday {
-            activeDailyCodingChallengeQuestion {
-              date
-              link
-              question {
-                title
-                titleSlug
-                difficulty
+          query dailyCodingQuestionRecords($year: Int!, $month: Int!) {
+            dailyCodingChallengeV2(year: $year, month: $month) {
+              challenges {
+                date
+                link
+                question {
+                  title
+                  titleSlug
+                  difficulty
+                }
               }
             }
           }
         `,
+        variables: { year, month },
       }),
     });
 
     if (!response.ok) return null;
 
     const data = await response.json();
-    const challenge = data?.data?.activeDailyCodingChallengeQuestion;
+    const challenges = data?.data?.dailyCodingChallengeV2?.challenges;
 
+    if (!challenges || !Array.isArray(challenges)) return null;
+
+    // Find the challenge for the specific date
+    const challenge = challenges.find((c: { date: string }) => c.date === targetDate);
+    
     if (!challenge) return null;
 
     return {
