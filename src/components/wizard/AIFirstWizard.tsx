@@ -8,7 +8,7 @@ import {
   ArrowLeft,
   Check,
   Loader2,
-  Target,
+  Lock,
   Code,
   Calendar,
   Home,
@@ -496,7 +496,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
       <div className="text-center">
         <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
-          <Target className="w-10 h-10 text-teal-400" />
+          <Lock className="w-10 h-10 text-teal-400" />
         </div>
         <h2 className="text-3xl font-bold text-white mb-3">
           What do you want to master?

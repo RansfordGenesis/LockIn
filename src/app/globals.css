@@ -152,3 +152,76 @@ body {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ===== Light Mode Styles ===== */
+.light-mode {
+  --color-background: 249 250 251;
+  --color-foreground: 17 24 39;
+  --color-card: 255 255 255;
+  --color-primary: 20 184 166;
+  --color-secondary: 243 244 246;
+  --color-muted: 229 231 235;
+  --color-muted-foreground: 107 114 128;
+  --color-border: 229 231 235;
+}
+
+.light-mode body {
+  background: rgb(249 250 251);
+  color: rgb(17 24 39);
+}
+
+.light-mode ::-webkit-scrollbar-track {
+  background: rgb(243 244 246);
+}
+
+.light-mode ::-webkit-scrollbar-thumb {
+  background: rgb(209 213 219);
+}
+
+.light-mode ::-webkit-scrollbar-thumb:hover {
+  background: rgb(156 163 175);
+}
+
+.light-mode * {
+  border-color: rgb(229 231 235);
+}
+
+.light-mode .glass {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.light-mode .glass-hover:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(20, 184, 166, 0.3);
+}
+
+.light-mode .pattern-dots {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+
+.light-mode .pattern-grid {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+}
+
+.light-mode .card-hover:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1), 0 0 40px rgba(20, 184, 166, 0.08);
+}
+
+/* Dark mode (default) explicit styles for class-based toggling */
+.dark-mode {
+  --color-background: 10 10 12;
+  --color-foreground: 250 250 250;
+  --color-card: 18 18 20;
+  --color-secondary: 30 30 35;
+  --color-muted: 40 40 45;
+  --color-muted-foreground: 163 163 163;
+  --color-border: 45 45 50;
+}
+
+.dark-mode body {
+  background: rgb(10 10 12);
+  color: rgb(250 250 250);
+}

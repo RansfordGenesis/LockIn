@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { signOut } from "next-auth/react";
 import { useAppStore } from "@/store/useAppStore";
 import { PlanSummary } from "@/types/multiplan";
-import AuthScreen from "@/components/auth/AuthScreen";
+import AuthScreen from "@/components/auth/AuthScreenNew";
 import AIFirstWizard from "@/components/wizard/AIFirstWizard";
 import DailyFocusView from "@/components/daily/DailyFocusView";
 import DashboardView from "@/components/dashboard/DashboardView";
 import FullYearPlanView from "@/components/curriculum/FullYearPlanView";
 import { PlanSidebar, PlanDropdown } from "@/components/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Target, Loader2, AlertCircle, HelpCircle } from "lucide-react";
+import { Lock, Loader2, AlertCircle, HelpCircle } from "lucide-react";
 import type { GoalInput, DayPlan } from "@/types/plan";
 
 // Auth user info passed from AuthScreen
@@ -636,13 +637,15 @@ export default function Home() {
     setCurrentDate(date);
   };
 
-  // Handle logout - clear local state and go to auth screen
-  const handleLogout = () => {
+  // Handle logout - clear local state, sign out of Google, and go to auth screen
+  const handleLogout = async () => {
     clearAll();
     setAuthUser(null);
     setShowDashboard(false);
     setShowCurriculum(false);
     setCurrentView("landing");
+    // Sign out of NextAuth (Google session)
+    await signOut({ redirect: false });
   };
 
   // Get today's date in YYYY-MM-DD format
@@ -659,8 +662,12 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading your journey...</p>
+          <p className="text-gray-400 text-sm">Getting your plans ready...</p>
+          <div className="flex justify-center gap-1 mt-4">
+            <div className="w-2 h-2 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-2 h-2 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-2 h-2 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
         </div>
       </div>
     );
@@ -936,7 +943,7 @@ function GeneratingPage({ error, onRetry }: { error: string | null; onRetry: () 
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              <Target className="w-8 h-8 text-teal-400" />
+              <Lock className="w-8 h-8 text-teal-400" />
             </motion.div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, getWeek, getQuarter, parseISO, isWithinInterval, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter } from "date-fns";
 import { 
-  Target, TrendingUp, Calendar, CheckCircle, Award, 
+  Lock, TrendingUp, Calendar, CheckCircle, Award, 
   Flame, BookOpen, Clock, ArrowLeft, ChevronLeft, ChevronRight, Circle
 } from "lucide-react";
 import type { Plan, DayPlan } from "@/types/plan";
@@ -386,7 +386,7 @@ export default function DashboardView({
             
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500">
-                <Target className="w-5 h-5 text-[#0a0a0c]" />
+                <Lock className="w-5 h-5 text-[#0a0a0c]" />
               </div>
               <span className="text-xl font-bold text-white">
                 Lock<span className="text-teal-400">In</span>

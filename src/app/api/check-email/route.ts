@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkEmailExists } from "@/lib/dynamodb";
+import { getUserByEmailV2 } from "@/lib/dynamodb";
 
-// Check if email already exists
+// Check if email already exists and return user info for Google auto-login
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -23,14 +23,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const exists = await checkEmailExists(email);
+    const user = await getUserByEmailV2(email.toLowerCase().trim());
+    const exists = !!user;
+
+    if (exists && user) {
+      return NextResponse.json({
+        success: true,
+        exists: true,
+        user: {
+          email: user.email,
+          name: user.name,
+          phoneNumber: user.phoneNumber,
+        },
+        message: "An account with this email already exists. Please login instead.",
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      exists,
-      message: exists 
-        ? "An account with this email already exists. Please login instead." 
-        : "Email is available",
+      exists: false,
+      message: "Email is available",
     });
   } catch (error) {
     console.error("Error checking email:", error);

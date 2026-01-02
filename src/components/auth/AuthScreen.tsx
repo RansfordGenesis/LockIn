@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Target, Mail, Phone, User, ArrowRight, Loader2, Calendar, Award } from "lucide-react";
+import { Lock, Mail, Phone, User, ArrowRight, Loader2, Calendar, Award } from "lucide-react";
 
 interface AuthScreenProps {
   onAuthSuccess: (user: { email: string; name: string; phone: string; isNewUser: boolean }) => void;
@@ -134,7 +134,7 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-2 mb-4">
             <div className="p-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500">
-              <Target className="w-8 h-8 text-[#0a0a0c]" />
+              <Lock className="w-8 h-8 text-[#0a0a0c]" />
             </div>
           </div>
           <h1 className="text-3xl font-bold text-white">
@@ -282,7 +282,7 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">
           <div className="p-4">
             <div className="flex justify-center mb-2">
-              <Target className="w-6 h-6 text-teal-400" />
+              <Lock className="w-6 h-6 text-teal-400" />
             </div>
             <p className="text-gray-400 text-sm">AI-Powered Plans</p>
           </div>
