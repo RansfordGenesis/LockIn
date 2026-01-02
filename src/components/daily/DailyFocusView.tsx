@@ -49,6 +49,8 @@ export default function DailyFocusView({
 
   const date = parseISO(currentDate);
   const isCurrentDay = isToday(date);
+  const isFutureDay = date > new Date();
+  const canCompleteTasks = !isFutureDay; // Can complete today and past days, not future
 
   // Get the user's preferred LeetCode language from plan settings
   const planWithLeetCode = plan as { includeLeetCode?: boolean; leetCodeLanguage?: string } | null;
@@ -73,6 +75,9 @@ export default function DailyFocusView({
 
   const handleTaskClick = (task: Task) => {
     if (completedTasks.has(task.taskId)) return;
+    
+    // Only allow completing tasks for today and past days (not future)
+    if (!canCompleteTasks) return;
 
     // Check if it's a LeetCode task
     if (isLeetCodeTask(task)) {
@@ -194,7 +199,7 @@ export default function DailyFocusView({
             <div className="flex items-center justify-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide pb-1 md:pb-0">
               <button
                 onClick={() => onViewChange("curriculum")}
-                className="flex-shrink-0 px-2 md:px-3 py-1.5 text-xs md:text-sm bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-teal-400 hover:from-teal-500/30 hover:to-emerald-500/30 rounded-lg transition-colors border border-teal-500/30"
+                className="flex-shrink-0 px-2 md:px-3 py-1.5 text-xs md:text-sm text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 📚 Full Plan
               </button>
@@ -318,6 +323,23 @@ export default function DailyFocusView({
           </motion.div>
         )}
 
+        {/* Future Day Notice */}
+        {isFutureDay && dayPlan && dayPlan.tasks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-amber-500/10 rounded-xl border border-amber-500/30"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">📅</span>
+              <div>
+                <p className="text-amber-400 font-medium">Viewing {format(date, "MMMM d")}</p>
+                <p className="text-sm text-amber-400/70">This is a future day. Come back on this day to complete tasks!</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Tasks */}
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Tasks</h3>
@@ -333,6 +355,7 @@ export default function DailyFocusView({
                 const isCompleted = completedTasks.has(task.taskId);
                 const isExpanded = expandedTask === task.taskId;
                 const typeStyle = TASK_TYPE_COLORS[task.type] || TASK_TYPE_COLORS.learn;
+                const canComplete = canCompleteTasks && !isCompleted;
 
                 return (
                   <motion.div
@@ -343,11 +366,13 @@ export default function DailyFocusView({
                     className={`rounded-2xl border transition-all ${
                       isCompleted
                         ? "bg-green-500/10 border-green-500/30"
+                        : isFutureDay
+                        ? "bg-white/5 border-white/10 opacity-60"
                         : "bg-white/5 border-white/10 hover:border-white/20"
-                    } ${!isCompleted && isLeetCodeTask(task) ? "cursor-pointer hover:bg-white/10" : ""}`}
+                    } ${canComplete && isLeetCodeTask(task) ? "cursor-pointer hover:bg-white/10" : ""}`}
                     onClick={() => {
                       // Make the entire card clickable for LeetCode tasks
-                      if (!isCompleted && isLeetCodeTask(task)) {
+                      if (canComplete && isLeetCodeTask(task)) {
                         handleTaskClick(task);
                       }
                     }}
@@ -360,10 +385,12 @@ export default function DailyFocusView({
                           e.stopPropagation(); // Prevent double trigger
                           handleTaskClick(task);
                         }}
-                        disabled={isCompleted}
+                        disabled={isCompleted || isFutureDay}
                         className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 ${
                           isCompleted
                             ? "bg-green-500 border-green-500 cursor-default"
+                            : isFutureDay
+                            ? "border-gray-600 cursor-not-allowed opacity-50"
                             : "border-white/30 hover:border-teal-500 hover:bg-teal-500/20"
                         }`}
                       >
@@ -381,25 +408,28 @@ export default function DailyFocusView({
                       {/* Task Info - clickable area for LeetCode tasks */}
                       <button 
                         type="button"
-                        className={`flex-1 min-w-0 text-left ${!isCompleted && isLeetCodeTask(task) ? "cursor-pointer" : ""}`}
+                        className={`flex-1 min-w-0 text-left ${canComplete && isLeetCodeTask(task) ? "cursor-pointer" : ""}`}
                         onClick={(e) => {
-                          if (!isCompleted && isLeetCodeTask(task)) {
+                          if (canComplete && isLeetCodeTask(task)) {
                             e.stopPropagation();
                             handleTaskClick(task);
                           }
                         }}
-                        disabled={isCompleted || !isLeetCodeTask(task)}
+                        disabled={isCompleted || isFutureDay || !isLeetCodeTask(task)}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeStyle.bg} ${typeStyle.text}`}>
                             {typeStyle.icon} {task.type}
                           </span>
                           <span className="text-xs text-gray-500">{task.estimatedMinutes} min</span>
-                          {isLeetCodeTask(task) && !isCompleted && (
+                          {isLeetCodeTask(task) && canComplete && (
                             <span className="text-xs text-teal-400 ml-auto">Click to open →</span>
                           )}
+                          {isFutureDay && !isCompleted && (
+                            <span className="text-xs text-gray-500 ml-auto">Future task</span>
+                          )}
                         </div>
-                        <h4 className={`font-medium ${isCompleted ? "text-gray-500 line-through" : "text-white"}`}>
+                        <h4 className={`font-medium ${isCompleted ? "text-gray-500 line-through" : isFutureDay ? "text-gray-400" : "text-white"}`}>
                           {task.title}
                         </h4>
                       </button>
@@ -581,12 +611,12 @@ export default function DailyFocusView({
               <span className="text-2xl">🏆</span>
               <div>
                 <p className="text-sm text-gray-400">Longest Streak</p>
-                <p className="text-xl font-bold text-amber-400">{longestStreak} days</p>
+                <p className="text-xl font-bold text-amber-400">{longestStreak} {longestStreak === 1 ? "day" : "days"}</p>
               </div>
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-400">Current</p>
-              <p className="text-xl font-bold text-teal-400">{currentStreak} days</p>
+              <p className="text-xl font-bold text-teal-400">{currentStreak} {currentStreak === 1 ? "day" : "days"}</p>
             </div>
           </div>
         </div>

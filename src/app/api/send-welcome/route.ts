@@ -101,15 +101,23 @@ async function sendEmail(email: string, subject: string, htmlContent: string): P
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phoneNumber, email, planTitle, userName } = body;
+    const { phoneNumber, email, planTitle, userName, startDate } = body;
 
     const results = { sms: false, email: false };
     const name = userName || "there";
+    
+    // Format the start date for display
+    const formatStartDate = (dateStr: string): string => {
+      if (!dateStr) return "soon";
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+    const formattedDate = formatStartDate(startDate);
 
     // Send welcome SMS
     if (phoneNumber) {
       const firstName = userName ? userName.split(" ")[0] : "";
-      const smsMessage = `🚀 ${firstName ? firstName + ", " : ""}Your LockIn plan is ready! "${planTitle}" starts Jan 1, 2026. Let's go! 💪 - LockIn`;
+      const smsMessage = `🚀 ${firstName ? firstName + ", " : ""}Your LockIn plan is ready! "${planTitle}" starts ${formattedDate}. Let's go! 💪 - LockIn`;
 
       results.sms = await sendSMS(phoneNumber, smsMessage);
     }
@@ -145,7 +153,7 @@ export async function POST(request: NextRequest) {
     </div>
     
     <h1>🎉 Your Plan is Ready!</h1>
-    <p class="subtitle">Hey ${name}, your 12-month journey begins now.</p>
+    <p class="subtitle">Hey ${name}, your learning journey begins now.</p>
     
     <p class="plan-title">"${planTitle}"</p>
     
@@ -164,7 +172,7 @@ export async function POST(request: NextRequest) {
       </div>
     </div>
     
-    <p style="color: #9ca3af;">Your journey kicks off on <strong style="color: #fff;">January 5, 2026</strong>. We'll send you daily reminders to keep you on track.</p>
+    <p style="color: #9ca3af;">Your journey kicks off on <strong style="color: #fff;">${formattedDate}</strong>. We'll send you daily reminders to keep you on track.</p>
     
     <p style="color: #9ca3af;">Remember: Consistency beats intensity. Small daily progress compounds into massive results.</p>
     

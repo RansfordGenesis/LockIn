@@ -20,39 +20,66 @@ export function PlanCard({
 }: PlanCardProps) {
   if (compact) {
     return (
-      <motion.button
-        onClick={onSelect}
-        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left ${
+      <div
+        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all ${
           isActive
             ? "bg-teal-500/20 border border-teal-500/50"
             : "bg-white/5 hover:bg-white/10 border border-transparent"
         }`}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
       >
-        <span className="text-2xl">{plan.planIcon || "📋"}</span>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-white truncate text-sm">
-            {plan.planTitle || "Untitled Plan"}
-          </h3>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
-                initial={{ width: 0 }}
-                animate={{ width: `${plan.progressPercent}%` }}
-                transition={{ duration: 0.5 }}
-              />
+        <button
+          onClick={onSelect}
+          className="flex-1 flex items-center gap-3 text-left min-w-0 overflow-hidden"
+        >
+          <span className="text-2xl flex-shrink-0">{plan.planIcon || "📋"}</span>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h3 className="font-medium text-white truncate text-sm">
+              {plan.planTitle || "Untitled Plan"}
+            </h3>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${plan.progressPercent}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+              <span className="text-xs text-gray-400 whitespace-nowrap">
+                {plan.progressPercent}%
+              </span>
             </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap">
-              {plan.progressPercent}%
-            </span>
           </div>
-        </div>
-        {isActive && (
-          <span className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
+          {isActive && (
+            <span className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
+          )}
+        </button>
+        {/* Delete button */}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
+            title="Delete plan"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </button>
         )}
-      </motion.button>
+      </div>
     );
   }
 

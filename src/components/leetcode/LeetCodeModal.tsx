@@ -110,10 +110,10 @@ export default function LeetCodeModal({
         }
 
         // Fallback: If daily challenge fetch fails, show error
-        setError("Could not fetch today's LeetCode Daily Challenge. Please try again or visit leetcode.com directly.");
+        setError("daily-fetch-failed");
       } catch (err) {
         console.error("Failed to fetch LeetCode daily:", err);
-        setError("Failed to connect to LeetCode. Please check your connection and try again.");
+        setError("connection-failed");
       }
     };
 
@@ -151,7 +151,7 @@ export default function LeetCodeModal({
 
   const handleSubmitCode = () => {
     if (!code.trim() || code.trim().length < 20) {
-      setError("Please paste your complete solution code.");
+      setError("✏️ Please paste your complete solution code (at least 20 characters)");
       return;
     }
     setError("");
@@ -160,7 +160,7 @@ export default function LeetCodeModal({
 
   const handleSubmitComplexity = async () => {
     if (!timeComplexity || !spaceComplexity) {
-      setError("Please select both time and space complexity.");
+      setError("🎯 Pick both time and space complexity to continue!");
       return;
     }
 
@@ -186,11 +186,11 @@ export default function LeetCodeModal({
         setVerificationResult(data);
         setStep("result");
       } else {
-        setError(data.error || "Verification failed. Please try again.");
+        setError("🤔 Hmm, something went wrong. Let's try that again!");
         setStep("complexity");
       }
     } catch {
-      setError("An error occurred during verification.");
+      setError("🔌 Connection hiccup! Check your internet and try again.");
       setStep("complexity");
     }
   };
@@ -213,8 +213,13 @@ export default function LeetCodeModal({
 
   const renderLoading = () => (
     <div className="flex flex-col items-center justify-center py-20">
-      <Loader2 className="w-12 h-12 text-teal-500 animate-spin mb-4" />
-      <p className="text-gray-400">Loading problem details...</p>
+      <div className="relative">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500/20 to-yellow-500/20 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 text-orange-400 animate-spin" />
+        </div>
+      </div>
+      <p className="text-white text-lg mt-6 font-medium">Fetching today&apos;s challenge... 🎯</p>
+      <p className="text-gray-400 text-sm mt-2">Getting ready for some coding fun!</p>
     </div>
   );
 
@@ -452,15 +457,18 @@ export default function LeetCodeModal({
   const renderVerifying = () => (
     <div className="flex flex-col items-center justify-center py-20">
       <div className="relative">
-        <Loader2 className="w-16 h-16 text-teal-500 animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Code className="w-6 h-6 text-teal-300" />
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 text-teal-400 animate-spin" />
         </div>
       </div>
-      <p className="text-white text-lg mt-6">Analyzing your solution...</p>
-      <p className="text-gray-400 text-sm mt-2">
-        Checking correctness, complexity, and code quality
+      <p className="text-white text-lg mt-6 font-medium">Crunching the code... 🧮</p>
+      <p className="text-gray-400 text-sm mt-2 text-center max-w-sm">
+        Our AI is checking your solution&apos;s correctness, complexity, and style
       </p>
+      <div className="flex items-center gap-2 mt-4 text-teal-400 text-sm">
+        <span className="animate-pulse">●</span>
+        <span>This usually takes a few seconds</span>
+      </div>
     </div>
   );
 
@@ -664,14 +672,35 @@ export default function LeetCodeModal({
           {step === "result" && renderResult()}
 
           {error && step === "loading" && (
-            <div className="text-center py-12">
-              <p className="text-red-400 mb-4">{error}</p>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
-              >
-                Close
-              </button>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500/20 to-yellow-500/20 flex items-center justify-center mb-4">
+                <span className="text-4xl">🐱</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                {error === "connection-failed" ? "Connection hiccup!" : "Couldn't fetch today's challenge"}
+              </h3>
+              <p className="text-gray-400 text-center max-w-sm mb-4">
+                {error === "connection-failed" 
+                  ? "Our code cat couldn't reach LeetCode. Check your connection and try again!"
+                  : "The daily challenge is being shy today. Try again or visit LeetCode directly!"}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="px-5 py-2.5 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors"
+                >
+                  Close
+                </button>
+                <a
+                  href="https://leetcode.com/problemset/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-medium rounded-xl hover:from-orange-400 hover:to-yellow-400 transition-all flex items-center gap-2"
+                >
+                  Open LeetCode
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
             </div>
           )}
         </div>

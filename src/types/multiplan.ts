@@ -36,10 +36,10 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     description: "Programming, web dev, mobile apps, AI/ML",
     showLeetCode: true,
     sampleGoals: [
-      "Full-stack development",
-      "Machine learning",
-      "Mobile app development",
-      "Backend engineering",
+      "Master full-stack development",
+      "Learn machine learning",
+      "Build mobile apps",
+      "Become a backend engineer",
     ],
   },
   {
@@ -50,9 +50,9 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     showLeetCode: false,
     sampleGoals: [
       "Build a robot",
-      "Home automation",
-      "PCB design",
-      "Embedded systems",
+      "Create home automation",
+      "Learn PCB design",
+      "Master embedded systems",
     ],
   },
   {
@@ -76,9 +76,9 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     showLeetCode: false,
     sampleGoals: [
       "Learn guitar",
-      "Piano fundamentals",
-      "Music production",
-      "Songwriting",
+      "Master piano fundamentals",
+      "Learn music production",
+      "Master songwriting",
     ],
   },
   {
@@ -90,8 +90,8 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     sampleGoals: [
       "Run a marathon",
       "Build muscle",
-      "Lose weight",
-      "Yoga practice",
+      "Lose weight healthily",
+      "Develop a yoga practice",
     ],
   },
   {
@@ -102,9 +102,9 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     showLeetCode: false,
     sampleGoals: [
       "Start a business",
-      "Digital marketing",
-      "Financial literacy",
-      "Leadership skills",
+      "Master digital marketing",
+      "Improve financial literacy",
+      "Develop leadership skills",
     ],
   },
   {
@@ -115,9 +115,9 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     showLeetCode: false,
     sampleGoals: [
       "Learn digital art",
-      "UI/UX design",
-      "Photography",
-      "Creative writing",
+      "Master UI/UX design",
+      "Learn photography",
+      "Improve creative writing",
     ],
   },
   {
@@ -127,8 +127,8 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     description: "School subjects, test prep, certifications",
     showLeetCode: false,
     sampleGoals: [
-      "Prepare for GRE",
-      "Study mathematics",
+      "Prepare for the GRE",
+      "Master mathematics",
       "Learn physics",
       "Get AWS certified",
     ],
@@ -140,10 +140,10 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     description: "Career development, soft skills",
     showLeetCode: false,
     sampleGoals: [
-      "Public speaking",
-      "Project management",
-      "Negotiation skills",
-      "Time management",
+      "Master public speaking",
+      "Learn project management",
+      "Develop negotiation skills",
+      "Improve time management",
     ],
   },
   {
@@ -155,7 +155,7 @@ export const PLAN_CATEGORIES: CategoryConfig[] = [
     sampleGoals: [
       "Build better habits",
       "Learn meditation",
-      "Improve sleep",
+      "Improve my sleep",
       "Read more books",
     ],
   },

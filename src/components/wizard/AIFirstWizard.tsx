@@ -10,11 +10,11 @@ import {
   Loader2,
   Target,
   Code,
-  User,
-  Mail,
-  Phone,
   Calendar,
   Home,
+  Clock,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { PLAN_CATEGORIES, TIMELINE_PRESETS, type PlanCategory } from "@/types/multiplan";
 
@@ -84,14 +84,14 @@ interface WizardData {
 }
 
 const leetCodeLanguages = [
-  { value: "python", label: "Python", icon: "🐍" },
-  { value: "javascript", label: "JavaScript", icon: "⚡" },
-  { value: "typescript", label: "TypeScript", icon: "💙" },
-  { value: "java", label: "Java", icon: "☕" },
-  { value: "cpp", label: "C++", icon: "⚙️" },
-  { value: "csharp", label: "C#", icon: "🔷" },
-  { value: "go", label: "Go", icon: "🐹" },
-  { value: "rust", label: "Rust", icon: "🦀" },
+  { value: "python", label: "Python" },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "java", label: "Java" },
+  { value: "cpp", label: "C++" },
+  { value: "csharp", label: "C#" },
+  { value: "go", label: "Go" },
+  { value: "rust", label: "Rust" },
 ];
 
 const scheduleOptions = [
@@ -106,9 +106,9 @@ const timeOptions = [
   { value: "3hr-daily", label: "3+ hours/day", description: "Intensive focus", minutes: 180 },
 ];
 
-export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readonly<{ onComplete: (data: WizardData) => void; onCancel?: () => void; authUser?: AuthUserInfo }>) {
-  // Skip contact step if authUser is provided
-  const [step, setStep] = useState<"category" | "goal" | "analyzing" | "questions" | "timeline" | "schedule" | "leetcode" | "contact" | "review">("category");
+export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readonly<{ onComplete: (data: WizardData) => void; onCancel?: () => void; authUser: AuthUserInfo }>) {
+  // authUser is always provided - contact info comes from auth screen
+  const [step, setStep] = useState<"category" | "goal" | "analyzing" | "questions" | "timeline" | "schedule" | "hours" | "leetcode" | "review">("category");
   const [data, setData] = useState<WizardData>(() => ({
     goal: "",
     analysis: null,
@@ -134,53 +134,13 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [error, setError] = useState("");
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Validation functions
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePhone = (phone: string): boolean => {
-    // Remove all non-digits except +
-    const cleaned = phone.replaceAll(/[^\d+]/g, "");
-    // Accept: +233XXXXXXXXX, 233XXXXXXXXX, 0XXXXXXXXX (9-15 digits)
-    const phoneRegex = /^(\+233|233|0)\d{9,12}$/;
-    return phoneRegex.test(cleaned);
-  };
-
-  const validateContactInfo = (): boolean => {
-    const errors: Record<string, string> = {};
-    
-    if (!data.firstName.trim()) {
-      errors.firstName = "First name is required";
-    } else if (data.firstName.trim().length < 2) {
-      errors.firstName = "First name must be at least 2 characters";
-    }
-    
-    if (!data.email.trim()) {
-      errors.email = "Email is required";
-    } else if (!validateEmail(data.email)) {
-      errors.email = "Please enter a valid email address";
-    }
-    
-    if (!data.phone.trim()) {
-      errors.phone = "Phone number is required for SMS reminders";
-    } else if (!validatePhone(data.phone)) {
-      errors.phone = "Please enter a valid Ghana phone number (0XX XXX XXXX or +233...)";
-    }
-    
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleContinueFromContact = () => {
-    if (validateContactInfo()) {
-      setStep("review");
-    }
-  };
+  const [isLoadingFollowUp, setIsLoadingFollowUp] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // Track dynamically generated follow-up questions for "Other" inputs
+  const [dynamicQuestions, setDynamicQuestions] = useState<Record<string, AIQuestion>>({});
+  // Track if user went through the hours step manually
+  const [wentThroughHoursStep, setWentThroughHoursStep] = useState(false); 
 
   // Event handlers to reduce nesting
   const handleGoalExampleClick = (example: string) => {
@@ -215,14 +175,23 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
     }
     
     setError("");
+    setAnalyzeError(null);
     setStep("analyzing");
 
     try {
       const response = await fetch("/api/analyze-goal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: data.goal }),
+        body: JSON.stringify({ 
+          goal: data.goal, 
+          selectedCategory: data.selectedCategory,
+          categoryName: selectedCategoryConfig?.name 
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
 
       const result = await response.json();
 
@@ -234,12 +203,11 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
         }));
         setStep("questions");
       } else {
-        setError(result.error || "Failed to analyze goal");
-        setStep("goal");
+        setAnalyzeError(result.error || "We couldn't analyze your goal. Please try again.");
       }
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setStep("goal");
+    } catch (err) {
+      console.error("Goal analysis error:", err);
+      setAnalyzeError("Our AI is taking a break. Please try again in a moment.");
     }
   };
 
@@ -277,7 +245,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
     return true;
   };
 
-  // Build the effective question list including conditional questions
+  // Build the effective question list including conditional questions and dynamic "Other" follow-ups
   const getEffectiveQuestions = (): AIQuestion[] => {
     if (!data.analysis) return [];
 
@@ -298,19 +266,72 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
           }
         }
       }
+
+      // Check if there's a dynamically generated follow-up for "Other" input
+      const dynamicFollowUp = dynamicQuestions[`${question.id}-other`];
+      if (dynamicFollowUp) {
+        const answer = data.answers[question.id];
+        const hasOther = answer === "other" || (Array.isArray(answer) && answer.includes("other"));
+        if (hasOther) {
+          effectiveQuestions.push(dynamicFollowUp);
+        }
+      }
     }
 
     return effectiveQuestions;
   };
 
-  const nextQuestion = () => {
+  const nextQuestion = async () => {
     if (!data.analysis) return;
 
     const effectiveQuestions = getEffectiveQuestions();
+    const currentQuestion = effectiveQuestions[currentQuestionIndex];
+    const answer = data.answers[currentQuestion.id];
+    const otherInput = data.otherInputs[currentQuestion.id];
+
+    // Check if user selected "other" and typed a custom value
+    const hasOtherWithInput = (answer === "other" || (Array.isArray(answer) && answer.includes("other"))) && otherInput;
+    
+    // If "other" is selected and we haven't already generated a follow-up for this question
+    if (hasOtherWithInput && !dynamicQuestions[`${currentQuestion.id}-other`]) {
+      setIsLoadingFollowUp(true);
+      try {
+        const response = await fetch("/api/generate-followup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            goal: data.goal,
+            categoryName: selectedCategoryConfig?.name,
+            parentQuestion: currentQuestion.question,
+            customAnswer: otherInput,
+            previousAnswers: data.answers,
+          }),
+        });
+        const result = await response.json();
+        if (result.success && result.question) {
+          // Store the dynamically generated question
+          setDynamicQuestions(prev => ({
+            ...prev,
+            [`${currentQuestion.id}-other`]: {
+              ...result.question,
+              id: `${currentQuestion.id}-followup`,
+            }
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to generate follow-up question:", err);
+      }
+      setIsLoadingFollowUp(false);
+    }
 
     if (currentQuestionIndex < effectiveQuestions.length - 1) {
       setCurrentQuestionIndex((i) => i + 1);
     } else {
+      // If AI asked about timeline, extract and apply the user's answer
+      if (aiAskedAboutTimeline()) {
+        const extractedTimeline = extractTimelineFromAIAnswer();
+        setData((prev) => ({ ...prev, timelineDays: extractedTimeline }));
+      }
       setStep("timeline");
     }
   };
@@ -335,6 +356,123 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
   const selectedCategoryConfig = data.selectedCategory 
     ? PLAN_CATEGORIES.find(c => c.id === data.selectedCategory) 
     : null;
+
+  // Helper: Check if AI asked about timeline in questions
+  const aiAskedAboutTimeline = (): boolean => {
+    if (!data.analysis?.questions) return false;
+    const timelineKeywords = ["timeline", "how long", "duration", "months", "weeks", "time frame", "study period"];
+    return data.analysis.questions.some(q => 
+      timelineKeywords.some(keyword => q.question.toLowerCase().includes(keyword))
+    );
+  };
+
+  // Helper: Check if AI asked about daily hours/time commitment
+  const aiAskedAboutHours = (): boolean => {
+    if (!data.analysis?.questions) return false;
+    const hoursKeywords = ["how much time", "hours per day", "time per day", "daily commitment", "time commitment", "hours daily"];
+    return data.analysis.questions.some(q => 
+      hoursKeywords.some(keyword => q.question.toLowerCase().includes(keyword))
+    );
+  };
+
+  // Helper: Check if user was explicitly asked about hours (either by AI or wizard)
+  // Returns true if:
+  // 1. AI asked about hours in questions, OR
+  // 2. User went through the hours step manually
+  const userWasAskedAboutHours = (): boolean => {
+    // If AI asked about hours in questions
+    if (aiAskedAboutHours()) return true;
+    // If user went through the hours step manually
+    if (wentThroughHoursStep) return true;
+    // Otherwise, AI suggested without asking
+    return false;
+  };
+
+  // Helper: Extract time commitment from AI question answer and map to standard format
+  const extractTimeCommitmentFromAIAnswer = (): string => {
+    if (!data.analysis?.questions) return "1hr-daily";
+    
+    const hoursKeywords = ["how much time", "hours per day", "time per day", "daily commitment", "time commitment", "hours daily"];
+    const hoursQuestion = data.analysis.questions.find(q => 
+      hoursKeywords.some(keyword => q.question.toLowerCase().includes(keyword))
+    );
+    
+    if (!hoursQuestion) return "1hr-daily";
+    
+    const answer = data.answers[hoursQuestion.id];
+    const answerStr = (Array.isArray(answer) ? answer[0] : answer)?.toLowerCase() || "";
+    const otherInput = data.otherInputs[hoursQuestion.id]?.toLowerCase() || "";
+    const combined = answerStr + " " + otherInput;
+    
+    // Map common answer patterns to standard time commitment values
+    if (combined.includes("3") || combined.includes("three") || combined.includes("intensive") || combined.includes("full")) {
+      return "3hr-daily";
+    }
+    if (combined.includes("2") || combined.includes("two") || combined.includes("accelerat")) {
+      return "2hr-daily";
+    }
+    if (combined.includes("30") || combined.includes("half") || combined.includes("light") || combined.includes("minimal")) {
+      return "30min-daily";
+    }
+    // Default to 1 hour
+    return "1hr-daily";
+  };
+
+  // Helper: Extract timeline (days) from AI question answer
+  const extractTimelineFromAIAnswer = (): number => {
+    if (!data.analysis?.questions) return 365;
+    
+    const timelineKeywords = ["timeline", "how long", "duration", "months", "weeks", "time frame", "study period"];
+    const timelineQuestion = data.analysis.questions.find(q => 
+      timelineKeywords.some(keyword => q.question.toLowerCase().includes(keyword))
+    );
+    
+    if (!timelineQuestion) return 365;
+    
+    const answer = data.answers[timelineQuestion.id];
+    const answerStr = (Array.isArray(answer) ? answer[0] : answer)?.toLowerCase() || "";
+    const otherInput = data.otherInputs[timelineQuestion.id]?.toLowerCase() || "";
+    const combined = answerStr + " " + otherInput;
+    
+    // Map common answer patterns to timeline days
+    // 1-3 months / short / quick / intensive
+    if (combined.includes("1 month") || combined.includes("1-month") || combined.includes("30 day")) {
+      return 30;
+    }
+    if (combined.includes("2 month") || combined.includes("2-month") || combined.includes("60 day")) {
+      return 60;
+    }
+    if (combined.includes("3 month") || combined.includes("3-month") || combined.includes("90 day") || combined.includes("quarter")) {
+      return 90;
+    }
+    // 3-6 months / medium / moderate
+    if (combined.includes("3-6") || combined.includes("4 month") || combined.includes("5 month") || combined.includes("6 month") || combined.includes("half year") || combined.includes("semester")) {
+      return 180;
+    }
+    // 6-12 months / long / comprehensive
+    if (combined.includes("6-12") || combined.includes("9 month") || combined.includes("year") || combined.includes("12 month") || combined.includes("365")) {
+      return 365;
+    }
+    // Specific week patterns
+    if (combined.includes("week")) {
+      const weekMatch = combined.match(/(\d+)\s*week/);
+      if (weekMatch) {
+        const weeks = parseInt(weekMatch[1]);
+        return weeks * 7;
+      }
+    }
+    // Specific month patterns
+    if (combined.includes("month")) {
+      const monthMatch = combined.match(/(\d+)\s*month/);
+      if (monthMatch) {
+        const months = parseInt(monthMatch[1]);
+        return months * 30;
+      }
+    }
+    
+    // Default to 6 months if AI asked but we can't parse
+    return 180;
+  };
 
   const renderCategoryStep = () => (
     <motion.div
@@ -477,7 +615,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
               : "bg-teal-500 text-white"
           }`}
         >
-          🤖 AI-Generated Plan
+          AI-Generated Plan
         </button>
         <button
           onClick={() => setData((prev) => ({ ...prev, useCustomCurriculum: true }))}
@@ -487,7 +625,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
               : "text-gray-400 hover:text-white"
           }`}
         >
-          📋 My Own Curriculum
+          My Own Curriculum
         </button>
       </div>
 
@@ -499,17 +637,17 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
               onChange={(e) => setData((prev) => ({ ...prev, customCurriculum: e.target.value }))}
               placeholder={`Paste your learning curriculum here. Example format:
 
-🏗️ Core Foundations
+Core Foundations
 - Python (OOP, async/await, decorators)
 - Git & GitHub (version control, branching)
 - Linux & CLI basics
 
-🌐 Web & HTTP
+Web & HTTP
 - HTTP methods (GET, POST, PUT, DELETE)
 - REST principles
 - JSON & serialization
 
-⚙️ Backend Frameworks
+Backend Frameworks
 - Django (models, views, templates)
 - FastAPI (path operations, Pydantic)
 ...`}
@@ -522,7 +660,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
           <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
             <p className="text-blue-400 text-sm">
-              💡 <strong>Tip:</strong> Use bullet points or checkboxes. We&apos;ll parse your curriculum and create daily tasks for you to track!
+              <strong>Tip:</strong> Use bullet points or checkboxes. We&apos;ll parse your curriculum and create daily tasks for you to track!
             </p>
           </div>
 
@@ -631,24 +769,64 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
       animate={{ opacity: 1, scale: 1 }}
       className="flex flex-col items-center justify-center py-20"
     >
-      <div className="relative">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
-          <Sparkles className="w-12 h-12 text-teal-400 animate-pulse" />
-        </div>
-        <motion.div
-          className="absolute inset-0 rounded-full border-2 border-teal-500/30"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        />
-      </div>
-      <h3 className="mt-8 text-xl font-semibold text-white">Analyzing Your Goal</h3>
-      <p className="mt-2 text-gray-400 text-center max-w-sm">
-        Our AI is understanding your goal and preparing personalized questions...
-      </p>
-      <div className="mt-6 flex items-center gap-2 text-teal-400">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-sm">This usually takes a few seconds</span>
-      </div>
+      {analyzeError ? (
+        // Error state with friendly message and retry
+        <>
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
+              <AlertCircle className="w-12 h-12 text-red-400" />
+            </div>
+          </div>
+          <h3 className="mt-8 text-xl font-semibold text-white">Oops! Something went wrong</h3>
+          <p className="mt-2 text-gray-400 text-center max-w-sm">
+            {analyzeError}
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={() => {
+                setAnalyzeError(null);
+                setStep("goal");
+              }}
+              className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Go Back
+            </button>
+            <button
+              onClick={() => {
+                setAnalyzeError(null);
+                analyzeGoal();
+              }}
+              className="px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </button>
+          </div>
+        </>
+      ) : (
+        // Loading state
+        <>
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
+              <Sparkles className="w-12 h-12 text-teal-400 animate-pulse" />
+            </div>
+            <motion.div
+              className="absolute inset-0 rounded-full border-2 border-teal-500/30"
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+          </div>
+          <h3 className="mt-8 text-xl font-semibold text-white">Analyzing Your Goal</h3>
+          <p className="mt-2 text-gray-400 text-center max-w-sm">
+            Our AI is understanding your goal and preparing personalized questions...
+          </p>
+          <div className="mt-6 flex items-center gap-2 text-teal-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">This usually takes a few seconds</span>
+          </div>
+        </>
+      )}
     </motion.div>
   );
 
@@ -777,11 +955,20 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
           </button>
           <button
             onClick={nextQuestion}
-            disabled={!isAnswered}
+            disabled={!isAnswered || isLoadingFollowUp}
             className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
           >
-            {currentQuestionIndex < effectiveQuestions.length - 1 ? "Next Question" : "Continue"}
-            <ArrowRight className="w-4 h-4" />
+            {isLoadingFollowUp ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                {currentQuestionIndex < effectiveQuestions.length - 1 ? "Next Question" : "Continue"}
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </div>
       </motion.div>
@@ -790,6 +977,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
   const renderTimelineStep = () => {
     const selectedPreset = TIMELINE_PRESETS.find(p => p.days === data.timelineDays);
+    const skipDurationSelection = aiAskedAboutTimeline();
     
     return (
       <motion.div
@@ -798,32 +986,39 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
         className="space-y-6"
       >
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-            <Calendar className="w-8 h-8 text-purple-400" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
+            <Calendar className="w-8 h-8 text-teal-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white">Plan Timeline</h2>
+          <h2 className="text-2xl font-bold text-white">
+            {skipDurationSelection ? "When do you want to start?" : "Plan Timeline"}
+          </h2>
           <p className="text-gray-400 mt-2">
-            How long do you want your learning journey to be?
+            {skipDurationSelection 
+              ? "Choose your start date for the learning journey"
+              : "How long do you want your learning journey to be?"
+            }
           </p>
         </div>
 
-        {/* Timeline presets */}
-        <div className="grid grid-cols-3 gap-3">
-          {TIMELINE_PRESETS.map((preset) => (
-            <button
-              key={preset.days}
-              onClick={() => setData((prev) => ({ ...prev, timelineDays: preset.days }))}
-              className={`p-4 rounded-xl border text-center transition-all ${
-                data.timelineDays === preset.days
-                  ? "bg-purple-500/20 border-purple-500/50"
-                  : "bg-white/5 border-white/10 hover:border-white/20"
-              }`}
-            >
-              <p className="font-bold text-white">{preset.label}</p>
-              <p className="text-xs text-gray-400 mt-1">{preset.description}</p>
-            </button>
-          ))}
-        </div>
+        {/* Timeline presets - only show if AI didn't ask about timeline */}
+        {!skipDurationSelection && (
+          <div className="grid grid-cols-3 gap-3">
+            {TIMELINE_PRESETS.map((preset) => (
+              <button
+                key={preset.days}
+                onClick={() => setData((prev) => ({ ...prev, timelineDays: preset.days }))}
+                className={`p-4 rounded-xl border text-center transition-all ${
+                  data.timelineDays === preset.days
+                    ? "bg-teal-500/20 border-teal-500/50"
+                    : "bg-white/5 border-white/10 hover:border-white/20"
+                }`}
+              >
+                <p className="font-bold text-white">{preset.label}</p>
+                <p className="text-xs text-gray-400 mt-1">{preset.description}</p>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Start Date */}
         <div className="space-y-2">
@@ -835,7 +1030,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
               value={data.startDate}
               onChange={(e) => setData((prev) => ({ ...prev, startDate: e.target.value }))}
               min={new Date().toISOString().split('T')[0]}
-              className="flex-1 p-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20"
+              className="flex-1 p-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20"
             />
             <button
               onClick={() => setData((prev) => ({ ...prev, startDate: new Date().toISOString().split('T')[0] }))}
@@ -847,23 +1042,27 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
         </div>
 
         {/* Summary */}
-        <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">Duration:</span>
-            <span className="text-purple-400 font-medium">{selectedPreset?.label || `${data.timelineDays} days`}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm mt-2">
+        <div className="p-4 bg-teal-500/10 rounded-xl border border-teal-500/20">
+          {!skipDurationSelection && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">Duration:</span>
+              <span className="text-teal-400 font-medium">{selectedPreset?.label || `${data.timelineDays} days`}</span>
+            </div>
+          )}
+          <div className={`flex items-center justify-between text-sm ${!skipDurationSelection ? 'mt-2' : ''}`}>
             <span className="text-gray-400">Start:</span>
-            <span className="text-purple-400 font-medium">
+            <span className="text-teal-400 font-medium">
               {new Date(data.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </span>
           </div>
-          <div className="flex items-center justify-between text-sm mt-2">
-            <span className="text-gray-400">End:</span>
-            <span className="text-purple-400 font-medium">
-              {new Date(new Date(data.startDate).getTime() + data.timelineDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            </span>
-          </div>
+          {!skipDurationSelection && (
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-gray-400">End:</span>
+              <span className="text-teal-400 font-medium">
+                {new Date(new Date(data.startDate).getTime() + data.timelineDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 pt-4">
@@ -902,7 +1101,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
     >
       <div className="text-center">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
-          <span className="text-3xl">📅</span>
+          <Calendar className="w-8 h-8 text-teal-400" />
         </div>
         <h2 className="text-2xl font-bold text-white">Weekly Schedule</h2>
         <p className="text-gray-400 mt-2">
@@ -931,8 +1130,8 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
       <div className="p-4 bg-white/5 rounded-xl border border-white/10">
         <p className="text-sm text-gray-400">
           {data.scheduleType === "weekdays" 
-            ? `📊 5 days/week for ${data.timelineDays} days = ~${Math.round(data.timelineDays * 5 / 7)} learning days`
-            : `📊 7 days/week for ${data.timelineDays} days = ${data.timelineDays} learning days`}
+            ? `5 days/week for ${data.timelineDays} days = ~${Math.round(data.timelineDays * 5 / 7)} learning days`
+            : `7 days/week for ${data.timelineDays} days = ${data.timelineDays} learning days`}
         </p>
       </div>
 
@@ -946,10 +1145,86 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
         </button>
         <button
           onClick={() => {
-            // Auto-set time commitment from AI suggestion if available
-            if (data.analysis?.suggestedTimeCommitment && !data.timeCommitment) {
-              setData((prev) => ({ ...prev, timeCommitment: data.analysis?.suggestedTimeCommitment || "1hr-daily" }));
-            } else if (!data.timeCommitment) {
+            // Only skip hours step if AI explicitly asked about time commitment in questions
+            // If AI suggested a time without asking, still let user confirm/change in hours step
+            const skipHoursStep = aiAskedAboutHours();
+            
+            // Auto-set experience based on the goal context (intermediate by default)
+            if (!data.experience) {
+              setData((prev) => ({ ...prev, experience: "intermediate" }));
+            }
+            
+            if (skipHoursStep) {
+              // AI asked about hours - extract the answer and map to timeCommitment
+              const extractedTime = extractTimeCommitmentFromAIAnswer();
+              setData((prev) => ({ ...prev, timeCommitment: extractedTime }));
+              
+              // Only show LeetCode step for Software Development category
+              if (data.selectedCategory === "software") {
+                setStep("leetcode");
+              } else {
+                setStep("review");
+              }
+            } else {
+              // AI didn't ask about hours - ask user manually
+              setWentThroughHoursStep(true);
+              setStep("hours");
+            }
+          }}
+          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
+        >
+          Continue
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </motion.div>
+  );
+
+  const renderHoursStep = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
+          <Clock className="w-8 h-8 text-teal-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Daily Time Commitment</h2>
+        <p className="text-gray-400 mt-2">
+          How much time can you dedicate to learning each day?
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {timeOptions.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => setData((prev) => ({ ...prev, timeCommitment: option.value }))}
+            className={`p-4 rounded-xl border text-center transition-all ${
+              data.timeCommitment === option.value
+                ? "bg-teal-500/20 border-teal-500/50"
+                : "bg-white/5 border-white/10 hover:border-white/20"
+            }`}
+          >
+            <p className="text-xl font-bold text-white">{option.label}</p>
+            <p className="text-sm text-gray-400 mt-1">{option.description}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-3 pt-4">
+        <button
+          onClick={() => setStep("schedule")}
+          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+        <button
+          onClick={() => {
+            // Set default if not selected
+            if (!data.timeCommitment) {
               setData((prev) => ({ ...prev, timeCommitment: "1hr-daily" }));
             }
             // Auto-set experience based on the goal context (intermediate by default)
@@ -960,11 +1235,11 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
             if (data.selectedCategory === "software") {
               setStep("leetcode");
             } else {
-              // Skip LeetCode step for non-software categories
-              setStep(authUser ? "review" : "contact");
+              setStep("review");
             }
           }}
-          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
+          disabled={!data.timeCommitment}
+          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
           Continue
           <ArrowRight className="w-4 h-4" />
@@ -1002,7 +1277,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
             <p className="text-white font-medium">Include Daily LeetCode</p>
             <p className="text-sm text-gray-400">One coding challenge per day to build problem-solving skills</p>
           </div>
-          <span className="text-2xl">💻</span>
+          <Code className="w-6 h-6 text-orange-400" />
         </label>
 
         {/* Language Selection (only show if LeetCode enabled) */}
@@ -1018,13 +1293,12 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
                 <button
                   key={lang.value}
                   onClick={() => handleLeetCodeLanguageSelect(lang.value)}
-                  className={`p-3 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                  className={`p-3 rounded-xl border text-center transition-all ${
                     data.leetCodeLanguage === lang.value
                       ? "bg-orange-500/20 border-orange-500/50 text-white"
                       : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
                   }`}
                 >
-                  <span className="text-xl">{lang.icon}</span>
                   <span>{lang.label}</span>
                 </button>
               ))}
@@ -1032,7 +1306,7 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
             <div className="p-4 bg-orange-500/10 rounded-xl border border-orange-500/20">
               <p className="text-orange-400 text-sm">
-                📝 How it works: Each day you&apos;ll get a LeetCode problem. Complete it, paste your code, and we&apos;ll verify your solution!
+                How it works: Each day you&apos;ll get a LeetCode problem. Complete it, paste your code, and we&apos;ll verify your solution!
               </p>
             </div>
           </motion.div>
@@ -1041,140 +1315,24 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
       <div className="flex gap-3 pt-4">
         <button
-          onClick={() => setStep("schedule")}
+          onClick={() => {
+            // Go back to hours step if user went through it, otherwise schedule
+            if (aiAskedAboutHours()) {
+              setStep("schedule");
+            } else {
+              setStep("hours");
+            }
+          }}
           className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
         <button
-          onClick={() => setStep(authUser ? "review" : "contact")}
+          onClick={() => setStep("review")}
           className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
         >
           Continue
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
-    </motion.div>
-  );
-
-  const renderContactStep = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-white">Stay Accountable</h2>
-        <p className="text-gray-400 mt-2">
-          Get daily reminders to keep you on track
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {/* First Name */}
-        <div>
-          <label className="block text-sm text-gray-400 mb-2">
-            <User className="w-4 h-4 inline mr-2" />
-            First Name
-          </label>
-          <input
-            type="text"
-            value={data.firstName}
-            onChange={(e) => {
-              setData((prev) => ({ ...prev, firstName: e.target.value }));
-              if (validationErrors.firstName) {
-                setValidationErrors((prev) => ({ ...prev, firstName: "" }));
-              }
-            }}
-            placeholder="John"
-            className={`w-full p-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-teal-500/20 ${
-              validationErrors.firstName ? "border-red-500" : "border-white/10 focus:border-teal-500/50"
-            }`}
-          />
-          {validationErrors.firstName && (
-            <p className="text-xs text-red-400 mt-1">{validationErrors.firstName}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-400 mb-2">
-            <Mail className="w-4 h-4 inline mr-2" />
-            Email Address
-          </label>
-          <input
-            type="email"
-            value={data.email}
-            onChange={(e) => {
-              setData((prev) => ({ ...prev, email: e.target.value }));
-              if (validationErrors.email) {
-                setValidationErrors((prev) => ({ ...prev, email: "" }));
-              }
-            }}
-            placeholder="your@email.com"
-            className={`w-full p-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-teal-500/20 ${
-              validationErrors.email ? "border-red-500" : "border-white/10 focus:border-teal-500/50"
-            }`}
-          />
-          {validationErrors.email && (
-            <p className="text-xs text-red-400 mt-1">{validationErrors.email}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-400 mb-2">
-            <Phone className="w-4 h-4 inline mr-2" />
-            Phone Number (for SMS)
-          </label>
-          <input
-            type="tel"
-            value={data.phone}
-            onChange={(e) => {
-              setData((prev) => ({ ...prev, phone: e.target.value }));
-              if (validationErrors.phone) {
-                setValidationErrors((prev) => ({ ...prev, phone: "" }));
-              }
-            }}
-            placeholder="0XX XXX XXXX or +233..."
-            className={`w-full p-3 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-teal-500/20 ${
-              validationErrors.phone ? "border-red-500" : "border-white/10 focus:border-teal-500/50"
-            }`}
-          />
-          {validationErrors.phone ? (
-            <p className="text-xs text-red-400 mt-1">{validationErrors.phone}</p>
-          ) : (
-            <p className="text-xs text-gray-500 mt-1">Accepts: +233, 233, 0XX formats (Ghana numbers)</p>
-          )}
-        </div>
-
-        <label className="flex items-center gap-3 p-4 bg-white/5 rounded-xl cursor-pointer">
-          <input
-            type="checkbox"
-            checked={data.enableNotifications}
-            onChange={(e) => setData((prev) => ({ ...prev, enableNotifications: e.target.checked }))}
-            className="w-5 h-5 rounded border-gray-500 text-teal-500 focus:ring-teal-500/20"
-            aria-label="Enable daily reminders"
-          />
-          <div>
-            <p className="text-white font-medium">Enable daily reminders</p>
-            <p className="text-sm text-gray-400">Get notified about your daily tasks</p>
-          </div>
-        </label>
-      </div>
-
-      <div className="flex gap-3 pt-4">
-        <button
-          onClick={() => setStep("leetcode")}
-          className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <button
-          onClick={handleContinueFromContact}
-          className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
-        >
-          Review Plan
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
@@ -1209,10 +1367,10 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
           </div>
 
           {/* Timeline Summary */}
-          <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
+          <div className="p-4 bg-teal-500/10 rounded-xl border border-teal-500/20">
             <div className="flex items-center gap-2 mb-2">
-              <Calendar className="w-4 h-4 text-purple-400" />
-              <span className="text-purple-400 font-medium">Timeline</span>
+              <Calendar className="w-4 h-4 text-teal-400" />
+              <span className="text-teal-400 font-medium">Timeline</span>
             </div>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
@@ -1246,20 +1404,23 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
             );
           })}
 
-          {/* Quick Summary */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Quick Summary - only show items user was asked about */}
+          <div className={`grid gap-3 ${userWasAskedAboutHours() ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
               <p className="text-xs text-gray-500">Schedule</p>
               <p className="text-white font-medium">
                 {data.scheduleType === "weekdays" ? "5 Days/Week" : "7 Days/Week"}
               </p>
             </div>
-            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <p className="text-xs text-gray-500">Time</p>
-              <p className="text-white font-medium">
-                {timeOptions.find((t) => t.value === data.timeCommitment)?.label}
-              </p>
-            </div>
+            {/* Only show time if user was explicitly asked (not auto-suggested by AI) */}
+            {userWasAskedAboutHours() && (
+              <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                <p className="text-xs text-gray-500">Time</p>
+                <p className="text-white font-medium">
+                  {timeOptions.find((t) => t.value === data.timeCommitment)?.label || "Flexible"}
+                </p>
+              </div>
+            )}
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
               <p className="text-xs text-gray-500">Experience</p>
               <p className="text-white font-medium capitalize">{data.experience}</p>
@@ -1287,7 +1448,18 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
 
         <div className="flex gap-3 pt-4">
           <button
-            onClick={() => setStep(authUser ? "leetcode" : "contact")}
+            onClick={() => {
+              // Go back based on category and whether hours step was shown
+              if (data.selectedCategory === "software") {
+                setStep("leetcode");
+              } else if (aiAskedAboutHours()) {
+                // AI asked about hours, so we skipped hours step - go back to schedule
+                setStep("schedule");
+              } else {
+                // User went through hours step
+                setStep("hours");
+              }
+            }}
             className="px-6 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1325,8 +1497,8 @@ export default function AIFirstWizard({ onComplete, onCancel, authUser }: Readon
           {step === "questions" && renderQuestionsStep()}
           {step === "timeline" && renderTimelineStep()}
           {step === "schedule" && renderScheduleStep()}
+          {step === "hours" && renderHoursStep()}
           {step === "leetcode" && renderLeetCodeStep()}
-          {step === "contact" && renderContactStep()}
           {step === "review" && renderReviewStep()}
         </AnimatePresence>
       </div>

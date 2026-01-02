@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
                   Hey${userName ? ` ${userName}` : ""},
                 </h2>
                 <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6; margin: 0;">
-                  Your personalized 12-month plan has been created! Here's your journey ahead:
+                  Your personalized plan has been created! Here's your journey ahead:
                 </p>
               </div>
 

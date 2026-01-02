@@ -9,6 +9,7 @@ interface PlanDropdownProps {
   activePlan: PlanSummary | null;
   onPlanSelect: (planId: string) => void;
   onAddPlan: () => void;
+  onDeletePlan?: (planId: string) => void;
   onLogout: () => void;
 }
 
@@ -17,9 +18,11 @@ export function PlanDropdown({
   activePlan,
   onPlanSelect,
   onAddPlan,
+  onDeletePlan,
   onLogout,
 }: PlanDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const canAddPlan = plans.length < MAX_PLANS_PER_USER;
 
@@ -43,13 +46,13 @@ export function PlanDropdown({
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-3 w-full p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-colors"
+        className="flex items-center gap-3 w-full p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-colors"
       >
         {activePlan ? (
           <>
-            <span className="text-2xl">{activePlan.planIcon || "📋"}</span>
-            <div className="flex-1 text-left min-w-0">
-              <div className="text-white font-medium truncate">
+            <span className="text-2xl flex-shrink-0">{activePlan.planIcon || "📋"}</span>
+            <div className="flex-1 text-left min-w-0 overflow-hidden">
+              <div className="text-white font-medium truncate text-sm">
                 {activePlan.planTitle || "Untitled Plan"}
               </div>
               <div className="text-xs text-gray-400">
@@ -96,43 +99,88 @@ export function PlanDropdown({
             {/* Plans List */}
             <div className="max-h-64 overflow-y-auto">
               {plans.map((plan) => (
-                <button
+                <div
                   key={plan.planId}
-                  onClick={() => {
-                    onPlanSelect(plan.planId);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 hover:bg-white/10 transition-colors ${
+                  className={`flex items-center gap-2 p-3 hover:bg-white/10 transition-colors ${
                     plan.planId === activePlan?.planId ? "bg-teal-500/20" : ""
                   }`}
                 >
-                  <span className="text-xl">{plan.planIcon || "📋"}</span>
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="text-white font-medium truncate text-sm">
-                      {plan.planTitle || "Untitled Plan"}
+                  {confirmDelete === plan.planId ? (
+                    // Confirm delete UI
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="text-sm text-gray-300">Delete this plan?</span>
+                      <button
+                        onClick={() => {
+                          onDeletePlan?.(plan.planId);
+                          setConfirmDelete(null);
+                          setIsOpen(false);
+                        }}
+                        className="px-2 py-1 text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        className="px-2 py-1 text-xs bg-white/10 text-gray-300 hover:bg-white/20 rounded"
+                      >
+                        No
+                      </button>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden max-w-[100px]">
-                        <div
-                          className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
-                          style={{ width: `${plan.progressPercent}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-400">
-                        {plan.progressPercent}%
-                      </span>
-                    </div>
-                  </div>
-                  {plan.planId === activePlan?.planId && (
-                    <svg
-                      className="w-5 h-5 text-teal-400"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                    </svg>
+                  ) : (
+                    // Normal plan display
+                    <>
+                      <button
+                        onClick={() => {
+                          onPlanSelect(plan.planId);
+                          setIsOpen(false);
+                        }}
+                        className="flex-1 flex items-center gap-3 text-left min-w-0 overflow-hidden"
+                      >
+                        <span className="text-xl flex-shrink-0">{plan.planIcon || "📋"}</span>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="text-white font-medium truncate text-sm">
+                            {plan.planTitle || "Untitled Plan"}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden max-w-[100px]">
+                              <div
+                                className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
+                                style={{ width: `${plan.progressPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {plan.progressPercent}%
+                            </span>
+                          </div>
+                        </div>
+                        {plan.planId === activePlan?.planId && (
+                          <svg
+                            className="w-5 h-5 text-teal-400"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                          </svg>
+                        )}
+                      </button>
+                      {/* Delete button */}
+                      {onDeletePlan && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDelete(plan.planId);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Delete plan"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </>
                   )}
-                </button>
+                </div>
               ))}
             </div>
 

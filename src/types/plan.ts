@@ -48,6 +48,7 @@ export interface GoalInput {
   // Custom timeline support
   startDate?: string;
   totalDays?: number;
+  icon?: string;
 }
 
 // Legacy support

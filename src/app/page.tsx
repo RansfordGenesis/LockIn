@@ -9,6 +9,7 @@ import DashboardView from "@/components/dashboard/DashboardView";
 import FullYearPlanView from "@/components/curriculum/FullYearPlanView";
 import { PlanSidebar, PlanDropdown } from "@/components/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { Target, Loader2, AlertCircle, HelpCircle } from "lucide-react";
 import type { GoalInput, DayPlan } from "@/types/plan";
 
 // Auth user info passed from AuthScreen
@@ -40,6 +41,7 @@ export default function Home() {
     longestStreak,
     isGenerating,
     setIsGenerating,
+    generationError,
     setGenerationError,
     clearPlan,
     clearAll,
@@ -64,6 +66,13 @@ export default function Home() {
       setCurrentView("daily");
     }
   }, [currentView, plan, user, setCurrentView]);
+
+  // Auto-redirect to wizard if user is authenticated but has no plan
+  React.useEffect(() => {
+    if (user && !plan && plans.length === 0 && currentView === "daily") {
+      setCurrentView("wizard");
+    }
+  }, [user, plan, plans.length, currentView, setCurrentView]);
 
   // Helper type for new plan format
   interface NewPlanFormat {
@@ -228,6 +237,11 @@ export default function Home() {
             completedDays: 0,
           });
 
+          // Restore user state FIRST so that setPlan calculates progress correctly
+          if (loginData.userState) {
+            restoreUserState(loginData.userState);
+          }
+
           // Set plans list and active plan ID
           if (loginData.plans) {
             setPlans(loginData.plans);
@@ -240,11 +254,6 @@ export default function Home() {
           }
 
           setPlan(loginData.plan);
-
-          // Restore user state
-          if (loginData.userState) {
-            restoreUserState(loginData.userState);
-          }
 
           setCurrentView("daily");
         } else if (loginData.needsPlan) {
@@ -272,11 +281,7 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success && data.plan) {
-        // Update store
-        setActivePlanId(planId);
-        setPlan(data.plan);
-
-        // Restore progress for this plan
+        // IMPORTANT: Restore progress FIRST so setPlan calculates correct progress
         restoreUserState({
           completedTasks: data.plan.completedTasks || {},
           totalPoints: data.plan.earnedPoints || 0,
@@ -285,6 +290,10 @@ export default function Home() {
           lastCheckIn: data.plan.lastCheckIn || null,
           dailyCheckIns: data.plan.dailyCheckIns || {},
         });
+
+        // Update store AFTER restoring state
+        setActivePlanId(planId);
+        setPlan(data.plan);
 
         // Switch active on server
         await fetch(`/api/plans/${planId}`, {
@@ -319,7 +328,12 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        removePlanSummary(planId);
+        // Update plans from server response to ensure fresh data
+        if (data.plans) {
+          setPlans(data.plans);
+        } else {
+          removePlanSummary(planId);
+        }
 
         // If deleted active plan, switch to another
         if (planId === activePlanId && data.plans?.length > 0) {
@@ -327,6 +341,13 @@ export default function Home() {
         } else if (data.plans?.length === 0) {
           // No plans left - go to wizard
           clearPlan();
+          // Set authUser so wizard has user info
+          setAuthUser({
+            email: user.email,
+            name: user.name || "",
+            phone: user.phoneNumber,
+            isNewUser: false,
+          });
           setCurrentView("wizard");
         }
       }
@@ -384,10 +405,6 @@ export default function Home() {
     setGoalInput(goalInput);
 
     try {
-      const userName = currentAuthUser.name;
-      const userEmail = currentAuthUser.email;
-      const userPhone = currentAuthUser.phone;
-
       // Generate the complete plan
       const planResponse = await fetch("/api/generate-enhanced-plan", {
         method: "POST",
@@ -407,9 +424,14 @@ export default function Home() {
         throw new Error(planData.error || "Failed to generate plan");
       }
 
-      // Check if this is a new user or adding a plan
-      if (isCreatingPlan && user) {
+      // Check if this is an existing user (adding a plan) vs truly new user
+      const isExistingUser = !!user || isCreatingPlan;
+      
+      if (isExistingUser) {
         // Existing user adding a new plan
+        const userEmail = currentAuthUser.email;
+        const userPhone = currentAuthUser.phone;
+        const userName = currentAuthUser.name;
         const planDocument = {
           planId: planData.plan.planId,
           planTitle: planData.plan.planTitle,
@@ -453,12 +475,38 @@ export default function Home() {
           throw new Error(addPlanData.error || "Failed to add plan");
         }
 
+        // Clear old completed tasks and set fresh state for the new plan
+        restoreUserState({
+          completedTasks: {},
+          totalPoints: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          lastCheckIn: null,
+          dailyCheckIns: {},
+        });
+
         setPlans(addPlanData.plans);
         setActivePlanId(planData.plan.planId);
         setPlan(planData.plan);
         setIsCreatingPlan(false);
+
+        // Send welcome SMS/Email for new plan
+        fetch("/api/send-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phoneNumber: userPhone,
+            email: userEmail,
+            planTitle: planData.plan.planTitle,
+            userName: userName,
+            startDate: planData.plan.startDate,
+          }),
+        }).catch(console.error);
       } else {
         // New user - create user with first plan
+        const userEmail = currentAuthUser.email;
+        const userPhone = currentAuthUser.phone;
+        const userName = currentAuthUser.name;
         const userResponse = await fetch("/api/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -518,6 +566,7 @@ export default function Home() {
             email: userEmail,
             planTitle: planData.plan.planTitle,
             userName: userName,
+            startDate: planData.plan.startDate,
           }),
         }).catch(console.error);
       }
@@ -564,7 +613,7 @@ export default function Home() {
     <div className="flex min-h-screen bg-[#0a0a0c]">
       {/* Desktop Sidebar - Only show when authenticated and has plans */}
       {isAuthenticated && currentView === "daily" && (
-        <aside className="hidden md:flex w-60 flex-col flex-shrink-0">
+        <aside className="hidden md:flex w-72 flex-col flex-shrink-0">
           <PlanSidebar
             plans={plans}
             activePlanId={activePlanId}
@@ -587,6 +636,7 @@ export default function Home() {
               activePlan={activePlanSummary}
               onPlanSelect={handlePlanSwitch}
               onAddPlan={handleAddPlan}
+              onDeletePlan={handleDeletePlan}
               onLogout={handleLogout}
             />
           </header>
@@ -616,7 +666,13 @@ export default function Home() {
                 exit={{ opacity: 0 }}
               >
                 {isGenerating ? (
-                  <GeneratingPage />
+                  <GeneratingPage 
+                    error={generationError}
+                    onRetry={() => {
+                      setGenerationError(null);
+                      setIsGenerating(false);
+                    }}
+                  />
                 ) : (
                   <AIFirstWizard
                     onComplete={handleWizardComplete}
@@ -703,20 +759,20 @@ export default function Home() {
 }
 
 // Generating Page with Timer and Motivational Messages
-function GeneratingPage() {
+function GeneratingPage({ error, onRetry }: { error: string | null; onRetry: () => void }) {
   const [seconds, setSeconds] = React.useState(0);
   const [messageIndex, setMessageIndex] = React.useState(0);
 
   const messages = [
-    { text: "Analyzing your goals...", emoji: "🎯" },
-    { text: "Mapping your calendar...", emoji: "📅" },
-    { text: "Creating personalized daily tasks...", emoji: "✨" },
-    { text: "Building recovery weeks...", emoji: "🧘" },
-    { text: "Setting up milestones...", emoji: "🏆" },
-    { text: "Finding learning resources...", emoji: "📚" },
-    { text: "Optimizing your learning path...", emoji: "🚀" },
-    { text: "Adding practice exercises...", emoji: "📝" },
-    { text: "Almost there...", emoji: "🎉" },
+    "Analyzing your goals...",
+    "Mapping your calendar...",
+    "Creating personalized daily tasks...",
+    "Building recovery weeks...",
+    "Setting up milestones...",
+    "Finding learning resources...",
+    "Optimizing your learning path...",
+    "Adding practice exercises...",
+    "Almost there...",
   ];
 
   const tips = [
@@ -728,22 +784,75 @@ function GeneratingPage() {
   ];
 
   React.useEffect(() => {
+    if (error) return; // Don't run timer on error
     const timer = setInterval(() => setSeconds(s => s + 1), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [error]);
 
   React.useEffect(() => {
+    if (error) return; // Don't cycle messages on error
     const interval = setInterval(() => {
       setMessageIndex(i => (i + 1) % messages.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, [messages.length]);
+  }, [error, messages.length]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
+
+  // Show cute error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-lg"
+        >
+          {/* Sad Robot */}
+          <div className="relative w-28 h-28 mx-auto mb-6">
+            <div className="w-28 h-28 rounded-full bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
+              <AlertCircle className="w-14 h-14 text-orange-400" />
+            </div>
+            <motion.div
+              className="absolute -top-1 -right-1"
+              animate={{ rotate: [0, -10, 10, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <HelpCircle className="w-6 h-6 text-gray-400" />
+            </motion.div>
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-3">
+            Oops! Our plan robot got confused
+          </h2>
+          
+          <p className="text-gray-400 mb-6 max-w-sm mx-auto">
+            Don&apos;t worry, it happens to the best of us! Let&apos;s give it another try.
+          </p>
+
+          <div className="flex flex-col gap-3 max-w-xs mx-auto">
+            <button
+              onClick={onRetry}
+              className="w-full py-3 px-6 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold rounded-xl hover:from-teal-400 hover:to-emerald-400 transition-all flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Try Again
+            </button>
+            
+            <p className="text-xs text-gray-500 mt-2">
+              If this keeps happening, our AI might be taking a break.
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-4">
@@ -765,13 +874,12 @@ function GeneratingPage() {
             className="absolute inset-2 rounded-full border-4 border-emerald-500/20 border-b-emerald-500"
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <motion.span
-              className="text-3xl"
+            <motion.div
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              🎯
-            </motion.span>
+              <Target className="w-8 h-8 text-teal-400" />
+            </motion.div>
           </div>
         </div>
 
@@ -792,8 +900,8 @@ function GeneratingPage() {
           exit={{ opacity: 0, y: -10 }}
           className="flex items-center justify-center gap-2 mb-8"
         >
-          <span className="text-2xl">{messages[messageIndex].emoji}</span>
-          <span className="text-gray-400">{messages[messageIndex].text}</span>
+          <Loader2 className="w-4 h-4 text-teal-400 animate-spin" />
+          <span className="text-gray-400">{messages[messageIndex]}</span>
         </motion.div>
 
         {/* Progress Bar */}

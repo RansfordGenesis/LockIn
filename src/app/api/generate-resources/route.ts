@@ -1,19 +1,185 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-
-const bedrock = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
 
 interface ResourceRequest {
   taskTitle: string;
   taskDescription: string;
   taskType: string;
   category: string;
+}
+
+// Known documentation sites that are guaranteed to work
+const DOC_SITES: Record<string, { url: string; name: string }> = {
+  python: { url: "https://docs.python.org/3/", name: "Python Docs" },
+  javascript: { url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript", name: "MDN JavaScript" },
+  typescript: { url: "https://www.typescriptlang.org/docs/", name: "TypeScript Docs" },
+  react: { url: "https://react.dev/", name: "React Docs" },
+  nextjs: { url: "https://nextjs.org/docs", name: "Next.js Docs" },
+  nodejs: { url: "https://nodejs.org/docs/latest/api/", name: "Node.js Docs" },
+  django: { url: "https://docs.djangoproject.com/", name: "Django Docs" },
+  fastapi: { url: "https://fastapi.tiangolo.com/", name: "FastAPI Docs" },
+  flask: { url: "https://flask.palletsprojects.com/", name: "Flask Docs" },
+  postgresql: { url: "https://www.postgresql.org/docs/", name: "PostgreSQL Docs" },
+  mongodb: { url: "https://www.mongodb.com/docs/", name: "MongoDB Docs" },
+  docker: { url: "https://docs.docker.com/", name: "Docker Docs" },
+  kubernetes: { url: "https://kubernetes.io/docs/", name: "Kubernetes Docs" },
+  git: { url: "https://git-scm.com/doc", name: "Git Documentation" },
+  github: { url: "https://docs.github.com/", name: "GitHub Docs" },
+  aws: { url: "https://docs.aws.amazon.com/", name: "AWS Docs" },
+  css: { url: "https://developer.mozilla.org/en-US/docs/Web/CSS", name: "MDN CSS" },
+  html: { url: "https://developer.mozilla.org/en-US/docs/Web/HTML", name: "MDN HTML" },
+  sql: { url: "https://www.w3schools.com/sql/", name: "W3Schools SQL" },
+  vue: { url: "https://vuejs.org/guide/", name: "Vue.js Guide" },
+  angular: { url: "https://angular.io/docs", name: "Angular Docs" },
+  tailwind: { url: "https://tailwindcss.com/docs", name: "Tailwind CSS Docs" },
+  redis: { url: "https://redis.io/docs/", name: "Redis Docs" },
+  graphql: { url: "https://graphql.org/learn/", name: "GraphQL Learn" },
+  rust: { url: "https://doc.rust-lang.org/book/", name: "Rust Book" },
+  go: { url: "https://go.dev/doc/", name: "Go Documentation" },
+  java: { url: "https://docs.oracle.com/en/java/", name: "Java Docs" },
+  kotlin: { url: "https://kotlinlang.org/docs/", name: "Kotlin Docs" },
+  swift: { url: "https://docs.swift.org/", name: "Swift Docs" },
+  machine_learning: { url: "https://scikit-learn.org/stable/user_guide.html", name: "Scikit-learn Guide" },
+  tensorflow: { url: "https://www.tensorflow.org/learn", name: "TensorFlow Learn" },
+  pytorch: { url: "https://pytorch.org/tutorials/", name: "PyTorch Tutorials" },
+};
+
+// Generate search URLs that always work
+function generateSearchUrl(platform: string, query: string): string {
+  const encodedQuery = encodeURIComponent(query);
+  const searchUrls: Record<string, string> = {
+    youtube: `https://www.youtube.com/results?search_query=${encodedQuery}+tutorial`,
+    google: `https://www.google.com/search?q=${encodedQuery}+tutorial`,
+    stackoverflow: `https://stackoverflow.com/search?q=${encodedQuery}`,
+    github: `https://github.com/search?q=${encodedQuery}&type=repositories`,
+    devto: `https://dev.to/search?q=${encodedQuery}`,
+    medium: `https://medium.com/search?q=${encodedQuery}`,
+    freecodecamp: `https://www.freecodecamp.org/news/search/?query=${encodedQuery}`,
+    coursera: `https://www.coursera.org/search?query=${encodedQuery}`,
+    udemy: `https://www.udemy.com/courses/search/?q=${encodedQuery}`,
+    w3schools: `https://www.w3schools.com/search/search.asp?q=${encodedQuery}`,
+  };
+  return searchUrls[platform] || searchUrls.google;
+}
+
+// Detect technologies from task title and description
+function detectTechnologies(text: string): string[] {
+  const textLower = text.toLowerCase();
+  const detected: string[] = [];
+  
+  for (const tech of Object.keys(DOC_SITES)) {
+    // Handle variations
+    const variations = [tech, tech.replace("_", " "), tech.replace("_", "-")];
+    if (tech === "nextjs") variations.push("next.js", "next js");
+    if (tech === "nodejs") variations.push("node.js", "node js", "node");
+    if (tech === "machine_learning") variations.push("ml", "machine learning");
+    
+    if (variations.some(v => textLower.includes(v))) {
+      detected.push(tech);
+    }
+  }
+  
+  return detected;
+}
+
+// Generate curated resources with guaranteed working links
+function generateResources(taskTitle: string, taskDescription: string, taskType: string, category: string) {
+  const resources: Array<{
+    title: string;
+    url: string;
+    type: string;
+    description: string;
+    source: string;
+    difficulty: string;
+    isFree: boolean;
+    estimatedMinutes: number;
+  }> = [];
+  
+  const searchQuery = taskTitle.split(/[\s\-:,]+/).filter(w => w.length > 2).slice(0, 4).join(" ");
+  const fullText = `${taskTitle} ${taskDescription} ${category}`;
+  const detectedTechs = detectTechnologies(fullText);
+  
+  // 1. Add official documentation for detected technologies
+  for (const tech of detectedTechs.slice(0, 2)) {
+    const doc = DOC_SITES[tech];
+    if (doc) {
+      resources.push({
+        title: doc.name,
+        url: doc.url,
+        type: "documentation",
+        description: `Official ${tech} docs`,
+        source: doc.name.split(" ")[0],
+        difficulty: "beginner",
+        isFree: true,
+        estimatedMinutes: 20,
+      });
+    }
+  }
+  
+  // 2. Add YouTube search
+  resources.push({
+    title: `${searchQuery} Tutorials`,
+    url: generateSearchUrl("youtube", searchQuery),
+    type: "video",
+    description: `Video tutorials`,
+    source: "YouTube",
+    difficulty: "beginner",
+    isFree: true,
+    estimatedMinutes: 15,
+  });
+  
+  // 3. Add practice resources based on task type
+  if (taskType === "practice" || taskType === "build") {
+    resources.push({
+      title: `${searchQuery} Examples`,
+      url: generateSearchUrl("github", searchQuery),
+      type: "project",
+      description: `Code examples & projects`,
+      source: "GitHub",
+      difficulty: "intermediate",
+      isFree: true,
+      estimatedMinutes: 30,
+    });
+  }
+  
+  // 4. Add articles
+  resources.push({
+    title: `${searchQuery} Articles`,
+    url: generateSearchUrl("devto", searchQuery),
+    type: "article",
+    description: `Community tutorials`,
+    source: "Dev.to",
+    difficulty: "intermediate",
+    isFree: true,
+    estimatedMinutes: 15,
+  });
+  
+  // 5. Add Stack Overflow for troubleshooting
+  resources.push({
+    title: `${searchQuery} Q&A`,
+    url: generateSearchUrl("stackoverflow", searchQuery),
+    type: "tool",
+    description: `Common questions`,
+    source: "Stack Overflow",
+    difficulty: "intermediate",
+    isFree: true,
+    estimatedMinutes: 10,
+  });
+  
+  // 6. Add course search for learn tasks (Coursera has free audits but courses are paid)
+  if (taskType === "learn" || taskType === "review") {
+    resources.push({
+      title: `Courses: ${searchQuery}`,
+      url: generateSearchUrl("coursera", searchQuery),
+      type: "course",
+      description: `Structured university courses`,
+      source: "Coursera",
+      difficulty: "intermediate",
+      isFree: false,
+      estimatedMinutes: 60,
+    });
+  }
+  
+  return resources.slice(0, 6);
 }
 
 export async function POST(request: NextRequest) {
@@ -28,85 +194,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `You are a learning resource curator. Generate 4-6 high-quality learning resources for the following task.
-
-Task: ${taskTitle}
-Description: ${taskDescription || "N/A"}
-Task Type: ${taskType || "learning"}
-Category: ${category}
-
-Return ONLY a valid JSON array with resources. Each resource must have:
-- title: Name of the resource
-- url: Real, working URL (use well-known platforms like YouTube, Coursera, MDN, freeCodeCamp, Khan Academy, Udemy, official docs, etc.)
-- type: One of: documentation, video, course, article, tutorial, exercise, book, podcast, tool, project
-- description: Brief 1-sentence description
-- source: Platform name (e.g., "YouTube", "MDN", "freeCodeCamp")
-- difficulty: beginner, intermediate, or advanced
-- isFree: true or false
-- estimatedMinutes: estimated time to complete (number)
-
-Focus on:
-- Real, accessible resources from reputable platforms
-- Mix of free and paid options (prefer free)
-- Variety of formats (videos, articles, interactive)
-- Progressive difficulty levels
-
-JSON array only, no markdown, no explanation:`;
-
-    const invokeCommand = new InvokeModelCommand({
-      modelId: "anthropic.claude-3-haiku-20240307-v1:0",
-      contentType: "application/json",
-      accept: "application/json",
-      body: JSON.stringify({
-        anthropic_version: "bedrock-2023-05-31",
-        max_tokens: 4096,
-        temperature: 0.7,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-    });
-
-    const response = await bedrock.send(invokeCommand);
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-    let content = responseBody.content[0].text.trim();
-
-    // Clean up the response
-    content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-    // Parse the JSON
-    let resources;
-    try {
-      resources = JSON.parse(content);
-    } catch {
-      // Try to find JSON array in the response
-      const match = content.match(/\[[\s\S]*\]/);
-      if (match) {
-        resources = JSON.parse(match[0]);
-      } else {
-        throw new Error("Failed to parse resources JSON");
-      }
-    }
-
-    // Validate resources array
-    if (!Array.isArray(resources)) {
-      resources = [resources];
-    }
-
-    // Ensure each resource has required fields
-    resources = resources.map((r: Record<string, unknown>) => ({
-      title: r.title || "Learning Resource",
-      url: r.url || "#",
-      type: r.type || "article",
-      description: r.description || "",
-      source: r.source || "Web",
-      difficulty: r.difficulty || "intermediate",
-      isFree: r.isFree !== false,
-      estimatedMinutes: r.estimatedMinutes || 30,
-    }));
+    // Generate curated resources with guaranteed working links
+    const resources = generateResources(taskTitle, taskDescription || "", taskType || "learn", category);
 
     return NextResponse.json({
       success: true,
@@ -115,58 +204,42 @@ JSON array only, no markdown, no explanation:`;
   } catch (error) {
     console.error("Error generating resources:", error);
     
-    // Return fallback resources based on category
-    const fallbackResources = getFallbackResources();
-    
+    // Return fallback resources
     return NextResponse.json({
       success: true,
-      resources: fallbackResources,
+      resources: [
+        {
+          title: "Search for Learning Resources",
+          url: "https://www.google.com/search?q=learning+tutorial",
+          type: "tool",
+          description: "Search for learning resources on this topic",
+          source: "Google",
+          difficulty: "beginner",
+          isFree: true,
+          estimatedMinutes: 10,
+        },
+        {
+          title: "Video Tutorials",
+          url: "https://www.youtube.com",
+          type: "video",
+          description: "Find video tutorials on this subject",
+          source: "YouTube",
+          difficulty: "beginner",
+          isFree: true,
+          estimatedMinutes: 30,
+        },
+        {
+          title: "freeCodeCamp",
+          url: "https://www.freecodecamp.org",
+          type: "tutorial",
+          description: "Free coding tutorials and certifications",
+          source: "freeCodeCamp",
+          difficulty: "beginner",
+          isFree: true,
+          estimatedMinutes: 45,
+        },
+      ],
       fallback: true,
     });
   }
-}
-
-function getFallbackResources() {
-  return [
-    {
-      title: "Google Search for Topic",
-      url: "https://www.google.com",
-      type: "tool",
-      description: "Search for learning resources on this topic",
-      source: "Google",
-      difficulty: "beginner",
-      isFree: true,
-      estimatedMinutes: 10,
-    },
-    {
-      title: "YouTube Tutorials",
-      url: "https://www.youtube.com",
-      type: "video",
-      description: "Find video tutorials on this subject",
-      source: "YouTube",
-      difficulty: "beginner",
-      isFree: true,
-      estimatedMinutes: 30,
-    },
-    {
-      title: "Coursera Courses",
-      url: "https://www.coursera.org",
-      type: "course",
-      description: "Structured courses from top universities",
-      source: "Coursera",
-      difficulty: "intermediate",
-      isFree: false,
-      estimatedMinutes: 60,
-    },
-    {
-      title: "freeCodeCamp",
-      url: "https://www.freecodecamp.org",
-      type: "tutorial",
-      description: "Free coding tutorials and certifications",
-      source: "freeCodeCamp",
-      difficulty: "beginner",
-      isFree: true,
-      estimatedMinutes: 45,
-    },
-  ];
 }

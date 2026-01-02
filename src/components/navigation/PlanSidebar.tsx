@@ -60,9 +60,7 @@ export function PlanSidebar({
             plan={plan}
             isActive={plan.planId === activePlanId}
             onSelect={() => onPlanSelect(plan.planId)}
-            onDelete={
-              plans.length > 1 ? () => handleDeleteClick(plan.planId) : undefined
-            }
+            onDelete={() => handleDeleteClick(plan.planId)}
             compact
           />
         ))}

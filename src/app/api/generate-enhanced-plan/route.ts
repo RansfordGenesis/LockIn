@@ -1403,7 +1403,7 @@ const buildCustomCurriculumPrompt = (
   dailyMins: number,
   totalDays: number,
   scheduleLabel: string
-) => `You are an expert technical curriculum architect. Transform the user's custom curriculum into a structured 12-month learning plan.
+) => `You are an expert technical curriculum architect. Transform the user's custom curriculum into a structured learning plan.
 
 === USER'S CUSTOM CURRICULUM ===
 ${curriculum}
@@ -1421,7 +1421,7 @@ Total Learning Days: ${totalDays} (${scheduleLabel})
    - Group related items into monthly themes
    - Don't skip any topics from the curriculum
 
-2. DISTRIBUTE ACROSS 12 MONTHS:
+2. DISTRIBUTE ACROSS THE TIMELINE:
    - Months 1-3: Foundational topics from the curriculum
    - Months 4-6: Intermediate topics
    - Months 7-9: Advanced topics
@@ -1476,9 +1476,9 @@ Return ONLY valid JSON with this structure:
 3. Each month has exactly 5 topics and 22-25 tasks
 4. Every task must be unique and specific
 5. Tasks follow consecutive learn → practice → apply pattern
-6. Generate ALL 12 months completely
+6. Generate ALL months completely based on the timeline
 
-Transform this curriculum into a comprehensive, actionable 12-month plan.`;
+Transform this curriculum into a comprehensive, actionable learning plan.`;
 
 // Helper: Build standard goal prompt with comprehensive curriculum design
 const buildStandardGoalPrompt = (
@@ -2034,8 +2034,10 @@ export async function POST(request: NextRequest) {
     const planData = {
       planId,
       planTitle: aiPlan.title || `${goalInput.categoryName || goalInput.category} Mastery 2026`,
-      planDescription: aiPlan.description || `A 12-month journey to master ${goalInput.primaryGoal || goalInput.category}`,
+      planDescription: aiPlan.description || `A journey to master ${goalInput.primaryGoal || goalInput.category}`,
       planCategory: goalInput.category,
+      planIcon: goalInput.icon || "✨",
+      startDate: customStartDate || new Date().toISOString().split('T')[0],
       scheduleType,
       timeCommitment: goalInput.timeCommitment,
       includeLeetCode: includeLeetCode || false,

@@ -1,8 +1,8 @@
 # LockIn - AI Planning Architect
 
 <div align="center">
-  <h3>🎯 12-Month Sustainable Goal Achievement Planning</h3>
-  <p>Transform ambitious goals into actionable, sustainable plans for 2026 powered by AI</p>
+  <h3>🎯 Sustainable Goal Achievement Planning</h3>
+  <p>Transform ambitious goals into actionable, sustainable plans powered by AI</p>
 </div>
 
 ---
@@ -39,7 +39,7 @@
 
 ### 💾 AWS DynamoDB Storage
 - **User Accounts** - Store email, phone, and preferences
-- **Plan Persistence** - Your full 12-month plan saved to the cloud
+- **Plan Persistence** - Your full learning plan saved to the cloud
 - **Progress Tracking** - Daily check-ins and completion status
 - **Notification Logs** - Track all sent reminders
 
@@ -146,7 +146,7 @@ src/
 ## 🔧 API Endpoints
 
 ### POST `/api/generate-plan`
-Generate a 12-month plan using AWS Bedrock (Claude).
+Generate a learning plan using AWS Bedrock (Claude).
 
 **Request Body:**
 ```json

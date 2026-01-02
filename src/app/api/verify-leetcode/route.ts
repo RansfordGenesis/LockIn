@@ -99,18 +99,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       );
     }
 
-    // Calculate points
-    const { base, bonus } = getDifficultyPoints(problem.difficulty);
+    // Calculate points - fixed 10 points for correct solutions
+    const { base } = getDifficultyPoints(problem.difficulty);
     let pointsEarned = 0;
 
     if (analysis.correctness === "correct") {
       pointsEarned = base;
-      // Bonus for correct complexity analysis
-      if (analysis.isTimeCorrect && analysis.isSpaceCorrect) {
-        pointsEarned += bonus;
-      } else if (analysis.isTimeCorrect || analysis.isSpaceCorrect) {
-        pointsEarned += Math.floor(bonus / 2);
-      }
     } else if (analysis.correctness === "partial") {
       pointsEarned = Math.floor(base / 2);
     }

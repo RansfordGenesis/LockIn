@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = `You are an AI planning architect specializing in sustainable long-term goal achievement.
 
-Given the following user input, generate a detailed 12-month execution plan:
+Given the following user input, generate a detailed learning execution plan:
 
 ## User Input
 - Goal: ${goal}
@@ -33,7 +33,7 @@ Return ONLY valid JSON (no markdown, no code blocks, just the raw JSON object):
 {
   "meta": {
     "goal_statement": "Restate goal in measurable terms",
-    "realistic_timeline": "Assessment of whether 12 months is realistic, with adjustments if needed",
+    "realistic_timeline": "Assessment of whether the timeline is realistic, with adjustments if needed",
     "critical_success_factors": ["Factor 1", "Factor 2", "Factor 3"],
     "common_failure_points": ["Failure point 1", "Failure point 2", "Failure point 3"]
   },
@@ -132,7 +132,7 @@ Return ONLY valid JSON (no markdown, no code blocks, just the raw JSON object):
   }
 }
 
-Generate ALL 12 months in the monthly_detail array. Include at least 4 daily task examples covering different days and weeks. Be specific to the user's goal, stack, and experience level.`;
+Generate the full plan based on the timeline in monthly_detail array. Include at least 4 daily task examples covering different days and weeks. Be specific to the user's goal, stack, and experience level.`;
 
     const bedrockResponse = await generateWithBedrock(prompt);
     const text = bedrockResponse.content;

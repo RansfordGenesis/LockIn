@@ -571,7 +571,7 @@ export default function DashboardView({
             </div>
             <p className="text-4xl font-bold text-white mb-1">{currentStreak}</p>
             <p className="text-sm text-teal-400">Current Streak</p>
-            <p className="text-xs text-gray-500 mt-1">Best: {longestStreak} days</p>
+            <p className="text-xs text-gray-500 mt-1">Best: {longestStreak} {longestStreak === 1 ? "day" : "days"}</p>
           </motion.div>
 
           <motion.div

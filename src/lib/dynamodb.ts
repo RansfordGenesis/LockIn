@@ -328,6 +328,7 @@ export async function getPlanById(email: string, planId: string): Promise<PlanDo
       startDate: user.planStartDate,
       endDate: user.planEndDate,
       totalDays: user.totalDays,
+      totalTasks: user.dailyTasks?.length || 0,
       scheduleType: user.scheduleType,
       timeCommitment: user.timeCommitment,
       experienceLevel: "intermediate",

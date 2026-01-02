@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Target, Mail, Phone, User, ArrowRight, Loader2 } from "lucide-react";
+import { Target, Mail, Phone, User, ArrowRight, Loader2, Calendar, Award } from "lucide-react";
 
 interface AuthScreenProps {
   onAuthSuccess: (user: { email: string; name: string; phone: string; isNewUser: boolean }) => void;
@@ -140,7 +140,7 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
           <h1 className="text-3xl font-bold text-white">
             Lock<span className="text-teal-400">In</span>
           </h1>
-          <p className="text-gray-400 mt-2">Your 12-month AI learning journey</p>
+          <p className="text-gray-400 mt-2">Your personalized AI learning journey</p>
         </div>
 
         {/* Auth Card */}
@@ -281,15 +281,21 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
         {/* Feature Highlights */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">
           <div className="p-4">
-            <div className="text-2xl mb-2">🎯</div>
+            <div className="flex justify-center mb-2">
+              <Target className="w-6 h-6 text-teal-400" />
+            </div>
             <p className="text-gray-400 text-sm">AI-Powered Plans</p>
           </div>
           <div className="p-4">
-            <div className="text-2xl mb-2">📅</div>
+            <div className="flex justify-center mb-2">
+              <Calendar className="w-6 h-6 text-purple-400" />
+            </div>
             <p className="text-gray-400 text-sm">365 Unique Tasks</p>
           </div>
           <div className="p-4">
-            <div className="text-2xl mb-2">🏆</div>
+            <div className="flex justify-center mb-2">
+              <Award className="w-6 h-6 text-amber-400" />
+            </div>
             <p className="text-gray-400 text-sm">Track Progress</p>
           </div>
         </div>
