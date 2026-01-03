@@ -8,7 +8,9 @@ interface PlanCardProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete?: () => void;
+  onRename?: () => void;
   compact?: boolean;
+  showArchiveInsteadOfDelete?: boolean;
 }
 
 export function PlanCard({
@@ -16,7 +18,9 @@ export function PlanCard({
   isActive,
   onSelect,
   onDelete,
+  onRename,
   compact = false,
+  showArchiveInsteadOfDelete = false,
 }: PlanCardProps) {
   if (compact) {
     return (
@@ -54,15 +58,15 @@ export function PlanCard({
             <span className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
           )}
         </button>
-        {/* Delete button */}
-        {onDelete && (
+        {/* Rename button */}
+        {onRename && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDelete();
+              onRename();
             }}
-            className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
-            title="Delete plan"
+            className="p-2 text-gray-400 hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors flex-shrink-0"
+            title="Rename plan"
           >
             <svg
               className="w-4 h-4"
@@ -74,9 +78,54 @@ export function PlanCard({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
               />
             </svg>
+          </button>
+        )}
+        {/* Archive button */}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className={`p-2 text-gray-400 rounded-lg transition-colors flex-shrink-0 ${
+              showArchiveInsteadOfDelete
+                ? "hover:text-amber-400 hover:bg-amber-500/10"
+                : "hover:text-red-400 hover:bg-red-500/10"
+            }`}
+            title={showArchiveInsteadOfDelete ? "Archive plan" : "Delete plan"}
+          >
+            {showArchiveInsteadOfDelete ? (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            )}
           </button>
         )}
       </div>

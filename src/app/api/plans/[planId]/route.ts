@@ -55,7 +55,7 @@ export async function GET(
 }
 
 // PUT /api/plans/[planId]
-// Updates a plan (switch active, update progress, etc.)
+// Updates a plan (switch active, update progress, rename, archive, etc.)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ planId: string }> }
@@ -63,10 +63,11 @@ export async function PUT(
   try {
     const { planId } = await params;
     const body = await request.json();
-    const { email, action, updates } = body as {
+    const { email, action, updates, newTitle } = body as {
       email: string;
-      action?: "switch" | "update";
+      action?: "switch" | "update" | "rename" | "archive" | "unarchive";
       updates?: Record<string, unknown>;
+      newTitle?: string;
     };
 
     if (!email) {
@@ -81,6 +82,26 @@ export async function PUT(
     if (action === "switch") {
       // Switch active plan
       result = await switchActivePlan(email, planId);
+    } else if (action === "rename" && newTitle) {
+      // Rename plan
+      result = await updatePlan(email, planId, {
+        planTitle: newTitle.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else if (action === "archive") {
+      // Archive plan (set isArchived flag instead of deleting)
+      result = await updatePlan(email, planId, {
+        isArchived: true,
+        archivedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else if (action === "unarchive") {
+      // Unarchive plan (restore from archive)
+      result = await updatePlan(email, planId, {
+        isArchived: false,
+        archivedAt: undefined,
+        updatedAt: new Date().toISOString(),
+      });
     } else if (action === "update" && updates) {
       // Update plan data
       result = await updatePlan(email, planId, updates);
@@ -102,11 +123,24 @@ export async function PUT(
     const plan = await getPlanById(email, planId);
     const plans = await getUserPlanSummaries(email);
 
+    // Separate active and archived plans
+    const activePlans = plans.filter((p: { isArchived?: boolean }) => !p.isArchived);
+    const archivedPlans = plans.filter((p: { isArchived?: boolean }) => p.isArchived);
+
+    // Determine active plan ID
+    let newActivePlanId = planId;
+    if (action === "archive" && activePlans.length > 0) {
+      newActivePlanId = activePlans[0].planId;
+    } else if (action === "unarchive") {
+      newActivePlanId = planId; // Switch to the unarchived plan
+    }
+
     return NextResponse.json({
       success: true,
       plan,
-      plans,
-      activePlanId: planId,
+      plans: activePlans,
+      archivedPlans,
+      activePlanId: newActivePlanId,
     });
   } catch (error) {
     console.error("Error updating plan:", error);

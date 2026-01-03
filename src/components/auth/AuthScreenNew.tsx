@@ -31,13 +31,21 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
   // Handle Google session - check if user exists and auto-login, otherwise ask for phone
   useEffect(() => {
     const handleGoogleSession = async () => {
+      // Check if user just logged out (indicated by sessionStorage flag)
+      const justLoggedOut = globalThis.sessionStorage?.getItem('lockin-just-logged-out');
+      if (justLoggedOut) {
+        // Clear the flag and don't auto-login
+        globalThis.sessionStorage?.removeItem('lockin-just-logged-out');
+        return;
+      }
+
       if (status === "authenticated" && session?.user) {
         const googleEmail = session.user.email || "";
         const fullName = session.user.name || "";
         const googleFirstName = fullName.split(" ")[0];
-        
+
         setIsGoogleLoading(true);
-        
+
         try {
           // Check if user already exists in database
           const checkResponse = await fetch("/api/check-email", {
@@ -45,9 +53,9 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: googleEmail.toLowerCase().trim() }),
           });
-          
+
           const checkData = await checkResponse.json();
-          
+
           if (checkData.exists && checkData.user) {
             // User exists - auto-login with their stored phone
             const loginResponse = await fetch("/api/auth/login", {
@@ -58,9 +66,9 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
                 phone: checkData.user.phoneNumber,
               }),
             });
-            
+
             const loginData = await loginResponse.json();
-            
+
             if (loginData.success) {
               // Auto-login successful
               onAuthSuccess({
@@ -72,7 +80,7 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
               setIsGoogleLoading(false);
               return;
             }
-            
+
             if (loginData.needsPlan) {
               // User exists but needs a plan
               onAuthSuccess({
@@ -85,7 +93,7 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
               return;
             }
           }
-          
+
           // User doesn't exist - show phone input form
           setGoogleUser({ email: googleEmail, firstName: googleFirstName });
           setAuthStep("google-phone");
@@ -95,11 +103,11 @@ export default function AuthScreen({ onAuthSuccess }: Readonly<AuthScreenProps>)
           setGoogleUser({ email: googleEmail, firstName: googleFirstName });
           setAuthStep("google-phone");
         }
-        
+
         setIsGoogleLoading(false);
       }
     };
-    
+
     handleGoogleSession();
   }, [session, status, onAuthSuccess]);
 

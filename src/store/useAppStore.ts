@@ -15,8 +15,10 @@ interface AppState {
 
   // Multi-Plan Management
   plans: PlanSummary[];
+  archivedPlans: PlanSummary[];
   activePlanId: string | null;
   setPlans: (plans: PlanSummary[]) => void;
+  setArchivedPlans: (plans: PlanSummary[]) => void;
   setActivePlanId: (planId: string | null) => void;
   addPlanSummary: (plan: PlanSummary) => void;
   updatePlanSummary: (planId: string, updates: Partial<PlanSummary>) => void;
@@ -118,8 +120,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   // Multi-Plan Management
   plans: [],
+  archivedPlans: [],
   activePlanId: null,
   setPlans: (plans) => set({ plans }),
+  setArchivedPlans: (archivedPlans) => set({ archivedPlans }),
   setActivePlanId: (planId) => set({ activePlanId: planId }),
   addPlanSummary: (plan) =>
     set((state) => {
@@ -587,6 +591,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({
       user: null,
       plans: [],
+      archivedPlans: [],
       activePlanId: null,
       plan: null,
       goalInput: null,

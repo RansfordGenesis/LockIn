@@ -52,6 +52,8 @@ export default function Home() {
     // Multi-plan state
     plans,
     setPlans,
+    archivedPlans,
+    setArchivedPlans,
     activePlanId,
     setActivePlanId,
     removePlanSummary,
@@ -242,11 +244,63 @@ export default function Home() {
   const handleAuthSuccess = async (authData: { email: string; name: string; phone: string; isNewUser: boolean }) => {
     // Save session for page refresh support
     saveSession(authData.email, authData.phone);
-    
+
     if (authData.isNewUser) {
-      // New user - save auth info and go to wizard
-      setAuthUser(authData);
-      setCurrentView("wizard");
+      // New user - create account in DB first, then go to wizard
+      try {
+        const createResponse = await fetch("/api/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: authData.email,
+            phoneNumber: authData.phone,
+            name: authData.name,
+            createWithoutPlan: true, // Create user without a plan
+          }),
+        });
+
+        const createData = await createResponse.json();
+
+        if (createData.success) {
+          // Set user in store
+          setUser({
+            userId: authData.email,
+            email: authData.email,
+            phoneNumber: authData.phone,
+            name: authData.name,
+            createdAt: createData.user.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            settings: {
+              scheduleType: "weekdays",
+              timeCommitment: "1hr-daily",
+              reminderTime: "09:00",
+              timezone: "Africa/Accra",
+              emailNotifications: true,
+              smsNotifications: true,
+            },
+            currentStreak: 0,
+            longestStreak: 0,
+            totalPoints: 0,
+            completedDays: 0,
+          });
+
+          setAuthUser(authData);
+          setCurrentView("wizard");
+        } else if (createData.error?.includes("already exists")) {
+          // User already exists - treat as existing user, go to wizard to create plan
+          setAuthUser(authData);
+          setCurrentView("wizard");
+        } else {
+          console.error("Failed to create user:", createData.error);
+          setAuthUser(authData);
+          setCurrentView("wizard");
+        }
+      } catch (error) {
+        console.error("Error creating user account:", error);
+        // Still go to wizard even if creation fails - we'll try again when plan is created
+        setAuthUser(authData);
+        setCurrentView("wizard");
+      }
     } else {
       // Existing user - fetch their plan and go to daily view
       try {
@@ -363,26 +417,40 @@ export default function Home() {
     setCurrentView("wizard");
   };
 
-  // Handle delete plan
+  // Handle delete plan (kept for backward compatibility)
   const handleDeletePlan = async (planId: string) => {
+    // Use archive instead of delete
+    handleArchivePlan(planId);
+  };
+
+  // Handle archive plan
+  const handleArchivePlan = async (planId: string) => {
     if (!user?.email) return;
 
     try {
-      const response = await fetch(`/api/plans/${planId}?email=${user.email}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/plans/${planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          action: "archive",
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // Update plans from server response to ensure fresh data
+        // Update both active and archived plans from server response
         if (data.plans) {
           setPlans(data.plans);
         } else {
           removePlanSummary(planId);
         }
+        if (data.archivedPlans) {
+          setArchivedPlans(data.archivedPlans);
+        }
 
-        // If deleted active plan, switch to another
+        // If archived active plan, switch to another
         if (planId === activePlanId && data.plans?.length > 0) {
           handlePlanSwitch(data.activePlanId);
         } else if (data.plans?.length === 0) {
@@ -399,7 +467,76 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error("Error deleting plan:", error);
+      console.error("Error archiving plan:", error);
+    }
+  };
+
+  // Handle rename plan
+  const handleRenamePlan = async (planId: string, newTitle: string) => {
+    if (!user?.email) return;
+
+    try {
+      const response = await fetch(`/api/plans/${planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          action: "rename",
+          newTitle,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update plans from server response
+        if (data.plans) {
+          setPlans(data.plans);
+        }
+        if (data.archivedPlans) {
+          setArchivedPlans(data.archivedPlans);
+        }
+        // If renamed the active plan, update it
+        if (planId === activePlanId && data.plan) {
+          setPlan(data.plan);
+        }
+      }
+    } catch (error) {
+      console.error("Error renaming plan:", error);
+    }
+  };
+
+  // Handle unarchive plan
+  const handleUnarchivePlan = async (planId: string) => {
+    if (!user?.email) return;
+
+    try {
+      const response = await fetch(`/api/plans/${planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          action: "unarchive",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update both active and archived plans
+        if (data.plans) {
+          setPlans(data.plans);
+        }
+        if (data.archivedPlans) {
+          setArchivedPlans(data.archivedPlans);
+        }
+        // Switch to the unarchived plan
+        if (data.activePlanId) {
+          handlePlanSwitch(data.activePlanId);
+        }
+      }
+    } catch (error) {
+      console.error("Error unarchiving plan:", error);
     }
   };
 
@@ -471,116 +608,55 @@ export default function Home() {
         throw new Error(planData.error || "Failed to generate plan");
       }
 
-      // Check if this is an existing user (adding a plan) vs truly new user
-      const isExistingUser = !!user || isCreatingPlan;
-      
-      if (isExistingUser) {
-        // Existing user adding a new plan
-        const userEmail = currentAuthUser.email;
-        const userPhone = currentAuthUser.phone;
-        const userName = currentAuthUser.name;
-        const planDocument = {
-          planId: planData.plan.planId,
-          planTitle: planData.plan.planTitle,
-          planDescription: planData.plan.planDescription,
-          planCategory: planData.plan.planCategory,
-          planIcon: planData.plan.planIcon || "✨",
-          startDate: planData.plan.startDate,
-          endDate: planData.plan.endDate,
-          totalDays: planData.plan.totalDays,
-          scheduleType: planData.plan.scheduleType,
-          timeCommitment: planData.plan.timeCommitment,
-          experienceLevel: wizardData.experience,
-          includeLeetCode: planData.plan.includeLeetCode,
-          leetCodeLanguage: wizardData.leetCodeLanguage,
-          dailyTasks: planData.plan.dailyTasks,
-          monthlyThemes: planData.plan.monthlyThemes,
-          completedTasks: {},
-          totalPoints: 0,
-          earnedPoints: 0,
-          currentStreak: 0,
-          longestStreak: 0,
-          lastCheckIn: null,
-          dailyCheckIns: {},
-          quizAttempts: [],
-          leetCodeSubmissions: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+      // User is always created before wizard now, so always add plan to existing user
+      const userEmail = currentAuthUser.email;
+      const userPhone = currentAuthUser.phone;
+      const userName = currentAuthUser.name;
+      const planDocument = {
+        planId: planData.plan.planId,
+        planTitle: planData.plan.planTitle,
+        planDescription: planData.plan.planDescription,
+        planCategory: planData.plan.planCategory,
+        planIcon: planData.plan.planIcon || "✨",
+        startDate: planData.plan.startDate,
+        endDate: planData.plan.endDate,
+        totalDays: planData.plan.totalDays,
+        scheduleType: planData.plan.scheduleType,
+        timeCommitment: planData.plan.timeCommitment,
+        experienceLevel: wizardData.experience,
+        includeLeetCode: planData.plan.includeLeetCode,
+        leetCodeLanguage: wizardData.leetCodeLanguage,
+        dailyTasks: planData.plan.dailyTasks,
+        monthlyThemes: planData.plan.monthlyThemes,
+        completedTasks: {},
+        totalPoints: 0,
+        earnedPoints: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastCheckIn: null,
+        dailyCheckIns: {},
+        quizAttempts: [],
+        leetCodeSubmissions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-        const addPlanResponse = await fetch("/api/plans", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: userEmail,
-            plan: planDocument,
-          }),
-        });
+      const addPlanResponse = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userEmail,
+          plan: planDocument,
+        }),
+      });
 
-        const addPlanData = await addPlanResponse.json();
-        if (!addPlanData.success) {
-          throw new Error(addPlanData.error || "Failed to add plan");
-        }
+      const addPlanData = await addPlanResponse.json();
+      if (!addPlanData.success) {
+        throw new Error(addPlanData.error || "Failed to add plan");
+      }
 
-        // Clear old completed tasks and set fresh state for the new plan
-        restoreUserState({
-          completedTasks: {},
-          totalPoints: 0,
-          currentStreak: 0,
-          longestStreak: 0,
-          lastCheckIn: null,
-          dailyCheckIns: {},
-        });
-
-        setPlans(addPlanData.plans);
-        setActivePlanId(planData.plan.planId);
-        setPlan(planData.plan);
-        setIsCreatingPlan(false);
-
-        // Send welcome SMS/Email for new plan
-        fetch("/api/send-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phoneNumber: userPhone,
-            email: userEmail,
-            planTitle: planData.plan.planTitle,
-            userName: userName,
-            startDate: planData.plan.startDate,
-          }),
-        }).catch(console.error);
-      } else {
-        // New user - create user with first plan
-        const userEmail = currentAuthUser.email;
-        const userPhone = currentAuthUser.phone;
-        const userName = currentAuthUser.name;
-        const userResponse = await fetch("/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: userEmail,
-            phoneNumber: userPhone,
-            name: userName,
-            planId: planData.plan.planId,
-            planTitle: planData.plan.planTitle,
-            planDescription: planData.plan.planDescription,
-            planCategory: planData.plan.planCategory,
-            planIcon: planData.plan.planIcon || "✨",
-            scheduleType: planData.plan.scheduleType,
-            timeCommitment: planData.plan.timeCommitment,
-            includeLeetCode: planData.plan.includeLeetCode,
-            totalDays: planData.plan.totalDays,
-            dailyTasks: planData.plan.dailyTasks,
-            monthlyThemes: planData.plan.monthlyThemes,
-          }),
-        });
-
-        const userData = await userResponse.json();
-        if (!userData.success) {
-          throw new Error(userData.error || "Failed to create account");
-        }
-
-        // Set local user state
+      // Set user state if not already set
+      if (!user) {
         setUser({
           userId: userEmail,
           email: userEmail,
@@ -601,22 +677,35 @@ export default function Home() {
           totalPoints: 0,
           completedDays: 0,
         });
-
-        setPlan(planData.plan);
-
-        // Send welcome SMS/Email
-        fetch("/api/send-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phoneNumber: userPhone,
-            email: userEmail,
-            planTitle: planData.plan.planTitle,
-            userName: userName,
-            startDate: planData.plan.startDate,
-          }),
-        }).catch(console.error);
       }
+
+      // Clear old completed tasks and set fresh state for the new plan
+      restoreUserState({
+        completedTasks: {},
+        totalPoints: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastCheckIn: null,
+        dailyCheckIns: {},
+      });
+
+      setPlans(addPlanData.plans);
+      setActivePlanId(planData.plan.planId);
+      setPlan(planData.plan);
+      setIsCreatingPlan(false);
+
+      // Send welcome SMS/Email for new plan
+      fetch("/api/send-welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: userPhone,
+          email: userEmail,
+          planTitle: planData.plan.planTitle,
+          userName: userName,
+          startDate: planData.plan.startDate,
+        }),
+      }).catch(console.error);
 
       setCurrentView("daily");
     } catch (error) {
@@ -639,13 +728,21 @@ export default function Home() {
 
   // Handle logout - clear local state, sign out of Google, and go to auth screen
   const handleLogout = async () => {
+    // Set a flag so auth screen doesn't auto-login with Google session
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('lockin-just-logged-out', 'true');
+    }
+
+    // Sign out of NextAuth FIRST (before clearing local state)
+    // This ensures the session is fully cleared before the auth screen checks for it
+    await signOut({ redirect: false });
+
+    // Now clear local state
     clearAll();
     setAuthUser(null);
     setShowDashboard(false);
     setShowCurriculum(false);
     setCurrentView("landing");
-    // Sign out of NextAuth (Google session)
-    await signOut({ redirect: false });
   };
 
   // Get today's date in YYYY-MM-DD format
@@ -678,13 +775,17 @@ export default function Home() {
     <div className="flex min-h-screen bg-[#0a0a0c]">
       {/* Desktop Sidebar - Only show when authenticated and has plans */}
       {isAuthenticated && currentView === "daily" && (
-        <aside className="hidden md:flex w-72 flex-col flex-shrink-0">
+        <aside className="hidden md:flex w-72 flex-col flex-shrink-0 h-screen sticky top-0">
           <PlanSidebar
             plans={plans}
+            archivedPlans={archivedPlans}
             activePlanId={activePlanId}
             onPlanSelect={handlePlanSwitch}
             onAddPlan={handleAddPlan}
             onDeletePlan={handleDeletePlan}
+            onRenamePlan={handleRenamePlan}
+            onArchivePlan={handleArchivePlan}
+            onUnarchivePlan={handleUnarchivePlan}
             userName={user?.name}
             onLogout={handleLogout}
           />
@@ -698,10 +799,14 @@ export default function Home() {
           <header className="md:hidden sticky top-0 z-[60] p-4 border-b border-white/10 bg-[#0a0a0c]/95 backdrop-blur-xl">
             <PlanDropdown
               plans={plans}
+              archivedPlans={archivedPlans}
               activePlan={activePlanSummary}
               onPlanSelect={handlePlanSwitch}
               onAddPlan={handleAddPlan}
               onDeletePlan={handleDeletePlan}
+              onRenamePlan={handleRenamePlan}
+              onArchivePlan={handleArchivePlan}
+              onUnarchivePlan={handleUnarchivePlan}
               onLogout={handleLogout}
             />
           </header>

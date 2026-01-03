@@ -238,6 +238,7 @@ export interface PlanSummary {
   isActive: boolean;
   createdAt: string;
   progressPercent: number; // Calculated: completedTasksCount / totalTasks * 100
+  isArchived?: boolean;
 }
 
 // ==========================================
@@ -285,6 +286,10 @@ export interface PlanDocument {
   // Metadata
   createdAt: string;
   updatedAt: string;
+
+  // Archive status
+  isArchived?: boolean;
+  archivedAt?: string;
 }
 
 export interface EnhancedDailyTask {
@@ -432,5 +437,6 @@ export function planDocumentToSummary(plan: PlanDocument): PlanSummary {
     isActive: false, // Set by caller based on activePlanId
     createdAt: plan.createdAt,
     progressPercent: calculateProgressPercent(completedTasksCount, totalTasks),
+    isArchived: plan.isArchived,
   };
 }

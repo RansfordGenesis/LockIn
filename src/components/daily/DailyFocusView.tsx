@@ -52,6 +52,10 @@ export default function DailyFocusView({
   const isFutureDay = date > new Date();
   const canCompleteTasks = !isFutureDay; // Can complete today and past days, not future
 
+  // Get plan start date to restrict backward navigation
+  const planStartDate = plan?.startDate ? parseISO(plan.startDate) : null;
+  const canGoBack = planStartDate ? date > planStartDate : true;
+
   // Get the user's preferred LeetCode language from plan settings
   const planWithLeetCode = plan as { includeLeetCode?: boolean; leetCodeLanguage?: string } | null;
   const leetCodeLanguage = planWithLeetCode?.includeLeetCode ? planWithLeetCode.leetCodeLanguage || "python" : "python";
@@ -62,6 +66,7 @@ export default function DailyFocusView({
   }, [checkStreakReset]);
 
   const navigateDate = (direction: "prev" | "next") => {
+    if (direction === "prev" && !canGoBack) return; // Don't go before plan start date
     const newDate = direction === "prev" ? subDays(date, 1) : addDays(date, 1);
     onDateChange(format(newDate, "yyyy-MM-dd"));
   };
@@ -171,9 +176,15 @@ export default function DailyFocusView({
             <div className="flex items-center justify-center gap-2 md:gap-4">
               <button
                 onClick={() => navigateDate("prev")}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                disabled={!canGoBack}
+                className={`p-2 rounded-lg transition-colors ${
+                  canGoBack
+                    ? "hover:bg-white/10"
+                    : "opacity-30 cursor-not-allowed"
+                }`}
+                title={!canGoBack ? "This is the start of your plan" : undefined}
               >
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 ${canGoBack ? "text-gray-400" : "text-gray-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>

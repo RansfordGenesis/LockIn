@@ -72,10 +72,22 @@ export default function DashboardView({
   // Check if this is the new plan format
   const isNewFormat = isNewPlanFormat(plan);
 
+  // Get plan start date for navigation restriction
+  const planStartDate = useMemo(() => {
+    if (isNewFormat && plan.dailyTasks.length > 0) {
+      // Find earliest task date
+      const dates = plan.dailyTasks.map(t => t.date).sort();
+      return dates[0] ? parseISO(dates[0]) : null;
+    }
+    // For old format or if no tasks, try to get startDate from plan
+    const planAny = plan as { startDate?: string };
+    return planAny.startDate ? parseISO(planAny.startDate) : null;
+  }, [plan, isNewFormat]);
+
   // Get period info based on viewMode and offset
   const periodInfo = useMemo(() => {
     const baseDate = new Date(today);
-    
+
     if (viewMode === "weekly") {
       // Adjust by weeks
       baseDate.setDate(baseDate.getDate() + (periodOffset * 7));
@@ -90,7 +102,7 @@ export default function DashboardView({
         type: "weekly" as const,
       };
     }
-    
+
     if (viewMode === "monthly") {
       // Adjust by months
       baseDate.setMonth(baseDate.getMonth() + periodOffset);
@@ -104,7 +116,7 @@ export default function DashboardView({
         type: "monthly" as const,
       };
     }
-    
+
     if (viewMode === "quarterly") {
       // Adjust by quarters (3 months)
       baseDate.setMonth(baseDate.getMonth() + (periodOffset * 3));
@@ -119,9 +131,16 @@ export default function DashboardView({
         type: "quarterly" as const,
       };
     }
-    
+
     return null;
   }, [viewMode, periodOffset, today]);
+
+  // Check if we can go back further (don't go before plan start date)
+  const canGoBackPeriod = useMemo(() => {
+    if (!periodInfo || !planStartDate) return true;
+    // Can go back if the previous period would still be on or after plan start
+    return periodInfo.start > planStartDate;
+  }, [periodInfo, planStartDate]);
 
   // Filter tasks for the selected period
   const periodTasks = useMemo(() => {
@@ -404,10 +423,16 @@ export default function DashboardView({
             <div className="mb-8">
               <div className="flex items-center justify-between mb-2">
                 <button
-                  onClick={() => setPeriodOffset(periodOffset - 1)}
-                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  onClick={() => canGoBackPeriod && setPeriodOffset(periodOffset - 1)}
+                  disabled={!canGoBackPeriod}
+                  className={`p-2 rounded-lg transition-colors ${
+                    canGoBackPeriod
+                      ? "hover:bg-white/10"
+                      : "opacity-30 cursor-not-allowed"
+                  }`}
+                  title={!canGoBackPeriod ? "This is the start of your plan" : undefined}
                 >
-                  <ChevronLeft className="w-6 h-6 text-gray-400" />
+                  <ChevronLeft className={`w-6 h-6 ${canGoBackPeriod ? "text-gray-400" : "text-gray-600"}`} />
                 </button>
                 
                 <div className="text-center">

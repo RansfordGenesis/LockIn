@@ -6,25 +6,66 @@ import { PlanSummary, MAX_PLANS_PER_USER } from "@/types/multiplan";
 
 interface PlanDropdownProps {
   plans: PlanSummary[];
+  archivedPlans?: PlanSummary[];
   activePlan: PlanSummary | null;
   onPlanSelect: (planId: string) => void;
   onAddPlan: () => void;
   onDeletePlan?: (planId: string) => void;
+  onRenamePlan?: (planId: string, newTitle: string) => void;
+  onArchivePlan?: (planId: string) => void;
+  onUnarchivePlan?: (planId: string) => void;
   onLogout: () => void;
 }
 
 export function PlanDropdown({
   plans,
+  archivedPlans = [],
   activePlan,
   onPlanSelect,
   onAddPlan,
   onDeletePlan,
+  onRenamePlan,
+  onArchivePlan,
+  onUnarchivePlan,
   onLogout,
 }: PlanDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
+  const [renameModal, setRenameModal] = useState<{ planId: string; currentTitle: string } | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const canAddPlan = plans.length < MAX_PLANS_PER_USER;
+
+  const handleArchiveClick = (planId: string) => {
+    setConfirmArchive(planId);
+  };
+
+  const confirmArchiveAction = () => {
+    if (confirmArchive) {
+      if (onArchivePlan) {
+        onArchivePlan(confirmArchive);
+      } else if (onDeletePlan) {
+        onDeletePlan(confirmArchive);
+      }
+      setConfirmArchive(null);
+      setIsOpen(false);
+    }
+  };
+
+  const handleRenameClick = (planId: string, currentTitle: string) => {
+    setRenameModal({ planId, currentTitle });
+    setNewTitle(currentTitle);
+    setIsOpen(false);
+  };
+
+  const confirmRename = () => {
+    if (renameModal && newTitle.trim() && onRenamePlan) {
+      onRenamePlan(renameModal.planId, newTitle.trim());
+      setRenameModal(null);
+      setNewTitle("");
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -105,22 +146,18 @@ export function PlanDropdown({
                     plan.planId === activePlan?.planId ? "bg-teal-500/20" : ""
                   }`}
                 >
-                  {confirmDelete === plan.planId ? (
-                    // Confirm delete UI
+                  {confirmArchive === plan.planId ? (
+                    // Confirm archive UI
                     <div className="flex-1 flex items-center gap-2">
-                      <span className="text-sm text-gray-300">Delete this plan?</span>
+                      <span className="text-sm text-gray-300">Archive this plan?</span>
                       <button
-                        onClick={() => {
-                          onDeletePlan?.(plan.planId);
-                          setConfirmDelete(null);
-                          setIsOpen(false);
-                        }}
-                        className="px-2 py-1 text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded"
+                        onClick={confirmArchiveAction}
+                        className="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded"
                       >
                         Yes
                       </button>
                       <button
-                        onClick={() => setConfirmDelete(null)}
+                        onClick={() => setConfirmArchive(null)}
                         className="px-2 py-1 text-xs bg-white/10 text-gray-300 hover:bg-white/20 rounded"
                       >
                         No
@@ -163,18 +200,33 @@ export function PlanDropdown({
                           </svg>
                         )}
                       </button>
-                      {/* Delete button */}
-                      {onDeletePlan && (
+                      {/* Rename button */}
+                      {onRenamePlan && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setConfirmDelete(plan.planId);
+                            handleRenameClick(plan.planId, plan.planTitle);
                           }}
-                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                          title="Delete plan"
+                          className="p-2 text-gray-400 hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors"
+                          title="Rename plan"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* Archive button */}
+                      {(onArchivePlan || onDeletePlan) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleArchiveClick(plan.planId);
+                          }}
+                          className="p-2 text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                          title="Archive plan"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                           </svg>
                         </button>
                       )}
@@ -222,6 +274,60 @@ export function PlanDropdown({
               </span>
             </button>
 
+            {/* Archived Plans Section */}
+            {archivedPlans.length > 0 && (
+              <>
+                <div className="border-t border-white/10" />
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className="w-full flex items-center gap-3 p-3 text-gray-400 hover:bg-white/5 transition-colors"
+                >
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showArchived ? "rotate-90" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span className="text-sm">Archived ({archivedPlans.length})</span>
+                </button>
+
+                {showArchived && (
+                  <div className="bg-black/20">
+                    {archivedPlans.map((plan) => (
+                      <div
+                        key={plan.planId}
+                        className="flex items-center gap-2 p-3 opacity-60"
+                      >
+                        <span className="text-lg flex-shrink-0">{plan.planIcon || "📋"}</span>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="text-gray-400 font-medium truncate text-sm">
+                            {plan.planTitle || "Untitled Plan"}
+                          </div>
+                          <div className="text-xs text-gray-500">{plan.progressPercent}% complete</div>
+                        </div>
+                        {onUnarchivePlan && (
+                          <button
+                            onClick={() => {
+                              onUnarchivePlan(plan.planId);
+                              setIsOpen(false);
+                            }}
+                            className="p-2 text-gray-400 hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors"
+                            title="Restore plan"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Divider */}
             <div className="border-t border-white/10" />
 
@@ -248,6 +354,58 @@ export function PlanDropdown({
               </svg>
               <span className="text-sm font-medium">Logout</span>
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Rename Modal */}
+      <AnimatePresence>
+        {renameModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4"
+            onClick={() => setRenameModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gray-900 border border-white/10 rounded-xl p-6 max-w-sm w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Rename Plan
+              </h3>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="Enter new plan name"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-teal-500/50 focus:outline-none mb-4"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmRename();
+                  if (e.key === "Escape") setRenameModal(null);
+                }}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setRenameModal(null)}
+                  className="flex-1 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRename}
+                  disabled={!newTitle.trim() || newTitle.trim() === renameModal.currentTitle}
+                  className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

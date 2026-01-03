@@ -13,7 +13,7 @@ import type {
   DEFAULT_USER_SETTINGS,
 } from "@/types/multiplan";
 
-// POST - Create a new user with their first plan (V2 schema)
+// POST - Create a new user with or without a plan (V2 schema)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
       email,
       phoneNumber,
       name,
-      // Plan data from generate-enhanced-plan
+      // Flag to create user without plan (for new user registration before wizard)
+      createWithoutPlan,
+      // Plan data from generate-enhanced-plan (optional if createWithoutPlan is true)
       planId,
       planTitle,
       planDescription,
@@ -80,6 +82,48 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
+
+    // If creating user without plan (new signup flow)
+    if (createWithoutPlan) {
+      const userDocument: UserDocumentV2 = {
+        email: normalizedEmail,
+        name: name || "",
+        phoneNumber: normalizedPhone,
+        createdAt: now,
+        updatedAt: now,
+        settings: {
+          reminderTime: "09:00",
+          timezone: "Africa/Accra",
+          emailNotifications: true,
+          smsNotifications: true,
+          theme: "dark",
+        },
+        plans: [],
+        activePlanId: null,
+        globalTotalPoints: 0,
+        globalCurrentStreak: 0,
+        globalLongestStreak: 0,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      };
+
+      // Save to DynamoDB
+      await saveUserV2(userDocument);
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          email: userDocument.email,
+          name: userDocument.name,
+          phoneNumber: userDocument.phoneNumber,
+          createdAt: userDocument.createdAt,
+        },
+        plans: [],
+        activePlanId: null,
+        needsPlan: true,
+      });
+    }
+
+    // Create with plan (existing flow)
     const startDate = planStartDate || now.split("T")[0];
     const endDate =
       planEndDate ||

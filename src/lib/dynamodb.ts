@@ -453,9 +453,14 @@ export async function switchActivePlan(email: string, planId: string): Promise<{
     return { success: false, error: "Please migrate to V2 schema first" };
   }
 
-  const planExists = user.plans.some((p) => p.planId === planId);
-  if (!planExists) {
+  const plan = user.plans.find((p) => p.planId === planId);
+  if (!plan) {
     return { success: false, error: "Plan not found" };
+  }
+
+  // Don't allow switching to archived plans
+  if (plan.isArchived) {
+    return { success: false, error: "Cannot switch to an archived plan" };
   }
 
   user.activePlanId = planId;
